@@ -2,12 +2,17 @@ package user
 
 import "golang.org/x/crypto/bcrypt"
 
-type PasswordEncrypter func(pwd string) ([]byte, error)
+type PasswordEncrypter interface {
+	Encrypt(pwd string) ([]byte, error)
+	Compare(encrypted, pwd string) error
+}
 
-// bcryptEncrypter return a PasswordEncrypter who will received a password and return that encrypted with bcrypt
-// algorithm with default cost
-func bcryptEncrypter() PasswordEncrypter {
-	return func(pwd string) ([]byte, error) {
-		return bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
-	}
+type bcryptEncrypt struct{}
+
+func (bcryptEncrypt) Encrypt(pwd string) ([]byte, error) {
+	return bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
+}
+
+func (bcryptEncrypt) Compare(encrypted, pwd string) error {
+	return bcrypt.CompareHashAndPassword([]byte(encrypted), []byte(pwd))
 }

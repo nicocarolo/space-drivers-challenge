@@ -15,6 +15,7 @@ import (
 type UsersStorage interface {
 	Get(ctx context.Context, id int64) (user.SecuredUser, error)
 	Save(ctx context.Context, user user.User) (user.SecuredUser, error)
+	Login(ctx context.Context, user user.User) (string, error)
 }
 
 type UserHandler struct {
@@ -34,7 +35,7 @@ func (h UserHandler) Get(c *gin.Context) {
 
 	userResp, err := h.Users.Get(c, id)
 	if err != nil {
-		code, resp := mapError(err)
+		code, resp := mapUserError(err)
 		c.JSON(code, resp)
 		return
 	}
@@ -53,7 +54,7 @@ func (h UserHandler) Create(c *gin.Context) {
 
 	createdUser, err := h.Users.Save(c, userToCreate)
 	if err != nil {
-		code, resp := mapError(err)
+		code, resp := mapUserError(err)
 		c.JSON(code, resp)
 		return
 	}
@@ -70,9 +71,9 @@ func (e apiError) Error() string {
 	return fmt.Sprintf("%s - %s", e.Code, e.Description)
 }
 
-// mapError received an error (preferentially a one received from storage) and return a http status code and
+// mapUserError received an error (preferentially a one received from storage) and return a http status code and
 // an api error to use on the return value to the client
-func mapError(err error) (int, error) {
+func mapUserError(err error) (int, error) {
 	errToStatus := map[user.Error]int{
 		user.ErrInvalidPasswordToSave: http.StatusBadRequest,
 		user.ErrInvalidRole:           http.StatusBadRequest,
@@ -93,7 +94,7 @@ func mapError(err error) (int, error) {
 
 	return http.StatusInternalServerError, apiError{
 		Code:        "error",
-		Description: userErr.Error(),
+		Description: err.Error(),
 	}
 }
 

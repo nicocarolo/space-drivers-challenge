@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nicocarolo/space-drivers/internal/platform/jwt"
 )
 
 const (
@@ -29,11 +30,12 @@ func (e Error) Detail() string {
 }
 
 var (
-	ErrInvalidPasswordToSave = Error{code: "invalid_password", detail: "cannot assign received password to user"}
-	ErrStorageSave           = Error{code: "storage_failure", detail: "an error ocurred trying to save user"}
-	ErrStorageGet            = Error{code: "storage_failure", detail: "an error ocurred trying to get user"}
-	ErrNotFoundUser          = Error{code: "not_found_user", detail: "not founded the user to get"}
-	ErrInvalidRole           = Error{code: "invalid_role", detail: "the received role should be admin or driver"}
+	ErrInvalidPasswordToSave  = Error{code: "invalid_password", detail: "cannot assign received password to user"}
+	ErrInvalidPasswordToLogin = Error{code: "invalid_password", detail: "the password received to login is invalid"}
+	ErrStorageSave            = Error{code: "storage_failure", detail: "an error ocurred trying to save user"}
+	ErrStorageGet             = Error{code: "storage_failure", detail: "an error ocurred trying to get user"}
+	ErrNotFoundUser           = Error{code: "not_found_user", detail: "not founded the user to get"}
+	ErrInvalidRole            = Error{code: "invalid_role", detail: "the received role should be admin or driver"}
 )
 
 // WithPasswordEncrypter will change the algorithm to encrypt password with the received
@@ -68,7 +70,7 @@ type UserStorageOption func(ust *UserStorage)
 func NewUserStorage(repository repository, opts ...UserStorageOption) UserStorage {
 	defaultUserStorage := UserStorage{
 		repository:        repository,
-		passwordEncrypter: bcryptEncrypter(),
+		passwordEncrypter: bcryptEncrypt{},
 	}
 
 	for _, opt := range opts {
@@ -99,7 +101,7 @@ func (userStorage UserStorage) Get(ctx context.Context, id int64) (SecuredUser, 
 // The password received is encrypted with passwordEncrypter on UserStorage, and the roles accepted are
 // 'admin' or 'driver's
 func (userStorage UserStorage) Save(ctx context.Context, user User) (SecuredUser, error) {
-	pwd, err := userStorage.passwordEncrypter(user.Password)
+	pwd, err := userStorage.passwordEncrypter.Encrypt(user.Password)
 	if err != nil {
 		return SecuredUser{}, ErrInvalidPasswordToSave
 	}
@@ -120,4 +122,28 @@ func (userStorage UserStorage) Save(ctx context.Context, user User) (SecuredUser
 		Email: user.Email,
 		Role:  user.Role,
 	}, nil
+}
+
+// Login receive an email and password from User, search the user on db and compare the password.
+// If the user exists and password is correct then return a generated jwt token.
+func (userStorage UserStorage) Login(ctx context.Context, user User) (string, error) {
+	userGet, err := userStorage.repository.GetUserByEmail(ctx, user.Email)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return "", ErrNotFoundUser
+		}
+		return "", ErrStorageGet
+	}
+
+	err = userStorage.passwordEncrypter.Compare(userGet.Password, user.Password)
+	if err != nil {
+		return "", ErrInvalidPasswordToLogin
+	}
+
+	token, err := jwt.GenerateToken(userGet.ID, userGet.Role)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
 }
