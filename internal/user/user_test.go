@@ -40,8 +40,9 @@ type mockDb struct {
 	idCount int64
 	users   map[int64]User
 
-	saveError map[string]error
-	getError  map[int64]error
+	saveError           map[string]error
+	getError            map[int64]error
+	getFreeDriversError error
 }
 
 func (db *mockDb) onCreate(email string, err error) *mockDb {
@@ -51,6 +52,11 @@ func (db *mockDb) onCreate(email string, err error) *mockDb {
 
 func (db *mockDb) onGet(id int64, err error) *mockDb {
 	db.getError[id] = err
+	return db
+}
+
+func (db *mockDb) onGetFreeDrivers(err error) *mockDb {
+	db.getFreeDriversError = err
 	return db
 }
 
@@ -87,6 +93,60 @@ func (db mockDb) GetUserByEmail(ctx context.Context, email string) (User, error)
 		}
 	}
 	return User{}, ErrUserNotFound
+}
+
+func (db mockDb) GetFreeDrivers(ctx context.Context) ([]User, error) {
+	if db.getFreeDriversError != nil {
+		return nil, db.getFreeDriversError
+	}
+	return []User{
+		User{
+			SecuredUser: SecuredUser{
+				ID:    1,
+				Email: "an_email@hotmail.com",
+				Role:  "driver",
+			},
+		},
+		User{
+			SecuredUser: SecuredUser{
+				ID:    2,
+				Email: "another_email@hotmail.com",
+				Role:  "driver",
+			},
+		},
+	}, nil
+}
+
+func (db mockDb) GetPaginate(ctx context.Context, limit, offset int64) ([]User, int64, error) {
+	users := []User{
+		User{
+			SecuredUser: SecuredUser{
+				ID:    1,
+				Email: "an_email@hotmail.com",
+				Role:  "driver",
+			},
+		},
+		User{
+			SecuredUser: SecuredUser{
+				ID:    2,
+				Email: "another_email@hotmail.com",
+				Role:  "driver",
+			},
+		},
+		User{
+			SecuredUser: SecuredUser{
+				ID:    3,
+				Email: "another_email3@hotmail.com",
+				Role:  "driver",
+			},
+		},
+	}
+
+	top := int64(len(users))
+	if limit+offset < top {
+		top = limit + offset
+	}
+	return users[offset:top], int64(len(users)), nil
 }
 
 func newMockDB() *mockDb {
@@ -300,6 +360,158 @@ func Test_loginUser(t *testing.T) {
 				assert.NotNil(t, result)
 
 				assert.NotEmpty(t, result)
+			} else {
+				assert.NotNil(t, err)
+				assert.Equal(t, tc.expected.Error(), err.Error())
+			}
+		})
+	}
+}
+
+func Test_searchUser(t *testing.T) {
+	tests := map[string]struct {
+		db           repository
+		opts         []SearchOption
+		wantUsers    []SecuredUser
+		wantMetadata Metadata
+		expected     error
+	}{
+		"successful free drivers search": {
+			db:   newMockDB(),
+			opts: []SearchOption{WithStatus(StatusSearchFree)},
+			wantUsers: []SecuredUser{
+				{
+					ID:    1,
+					Email: "an_email@hotmail.com",
+					Role:  "driver",
+				},
+				{
+					ID:    2,
+					Email: "another_email@hotmail.com",
+					Role:  "driver",
+				},
+			},
+			wantMetadata: Metadata{
+				Total:   2,
+				Pending: 0,
+			},
+		},
+
+		"failure free drivers search: not found": {
+			db:       newMockDB().onGetFreeDrivers(ErrUserNotFound),
+			opts:     []SearchOption{WithStatus(StatusSearchFree)},
+			expected: ErrNotFoundUser,
+		},
+
+		"failure free drivers search: storage error": {
+			db:       newMockDB().onGetFreeDrivers(errors.New("mock st error")),
+			opts:     []SearchOption{WithStatus(StatusSearchFree)},
+			expected: ErrStorageGet,
+		},
+
+		"successful get driver paginate search": {
+			db:   newMockDB(),
+			opts: []SearchOption{},
+			wantUsers: []SecuredUser{
+				{
+					ID:    1,
+					Email: "an_email@hotmail.com",
+					Role:  "driver",
+				},
+				{
+					ID:    2,
+					Email: "another_email@hotmail.com",
+					Role:  "driver",
+				},
+				{
+					ID:    3,
+					Email: "another_email3@hotmail.com",
+					Role:  "driver",
+				},
+			},
+			wantMetadata: Metadata{
+				Total:   3,
+				Pending: 0,
+			},
+		},
+
+		"successful get driver paginate search with limit": {
+			db:   newMockDB(),
+			opts: []SearchOption{WithLimit(2)},
+			wantUsers: []SecuredUser{
+				{
+					ID:    1,
+					Email: "an_email@hotmail.com",
+					Role:  "driver",
+				},
+				{
+					ID:    2,
+					Email: "another_email@hotmail.com",
+					Role:  "driver",
+				},
+			},
+			wantMetadata: Metadata{
+				Total:   3,
+				Pending: 1,
+			},
+		},
+
+		"successful get driver paginate search with offset": {
+			db:   newMockDB(),
+			opts: []SearchOption{WithOffset(1)},
+			wantUsers: []SecuredUser{
+				{
+					ID:    2,
+					Email: "another_email@hotmail.com",
+					Role:  "driver",
+				},
+				{
+					ID:    3,
+					Email: "another_email3@hotmail.com",
+					Role:  "driver",
+				},
+			},
+			wantMetadata: Metadata{
+				Total:   3,
+				Pending: 0,
+			},
+		},
+
+		"successful get driver paginate search with limit and offset": {
+			db:   newMockDB(),
+			opts: []SearchOption{WithLimit(1), WithOffset(1)},
+			wantUsers: []SecuredUser{
+				{
+					ID:    2,
+					Email: "another_email@hotmail.com",
+					Role:  "driver",
+				},
+			},
+			wantMetadata: Metadata{
+				Total:   3,
+				Pending: 1,
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			userStorage := NewUserStorage(tc.db)
+			result, meta, err := userStorage.Search(context.Background(), tc.opts...)
+
+			if tc.expected == nil {
+				assert.Nil(t, err)
+				assert.NotNil(t, result)
+
+				assert.Len(t, result, len(tc.wantUsers))
+				assert.Equal(t, tc.wantMetadata.Total, meta.Total)
+				assert.Equal(t, tc.wantMetadata.Pending, meta.Pending)
+				for i, securedUser := range tc.wantUsers {
+					assert.Equal(t, securedUser.ID, result[i].ID)
+					assert.Equal(t, securedUser.Email, result[i].Email)
+					assert.Equal(t, securedUser.Email, result[i].Email)
+					assert.Equal(t, securedUser.Role, result[i].Role)
+				}
 			} else {
 				assert.NotNil(t, err)
 				assert.Equal(t, tc.expected.Error(), err.Error())

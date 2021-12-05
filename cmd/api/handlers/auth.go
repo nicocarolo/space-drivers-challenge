@@ -140,6 +140,7 @@ func NewRoleControl() Rules {
 
 	r.AddRule(newRule("/v1/user/", "POST", "admin"))
 	r.AddRule(newRule("/v1/user/:id", "GET", "admin"))
+	r.AddRule(newRule("/v1/user/drivers", "GET", "admin"))
 
 	r.AddRule(newRule("/v1/travel/", "POST", "admin"))
 	r.AddRule(newRule("/v1/travel/:id", "GET", "admin"))

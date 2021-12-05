@@ -147,3 +147,90 @@ func (userStorage UserStorage) Login(ctx context.Context, user User) (string, er
 
 	return token, nil
 }
+
+type Search struct {
+	status StatusSearch
+	offset int64
+	limit  int64
+}
+
+type StatusSearch string
+
+const (
+	StatusSearchBusy = "busy"
+	StatusSearchFree = "free"
+	StatusSearchNone = "none"
+)
+
+func WithStatus(status StatusSearch) SearchOption {
+	return func(s *Search) {
+		s.status = status
+	}
+}
+
+func WithOffset(offset int64) SearchOption {
+	return func(s *Search) {
+		s.offset = offset
+	}
+}
+
+func WithLimit(limit int64) SearchOption {
+	return func(s *Search) {
+		s.limit = limit
+	}
+}
+
+type SearchOption func(ust *Search)
+
+type Metadata struct {
+	Total   int64
+	Pending int64
+}
+
+// Search users on repository by status (currently only free drivers) or with pagination
+func (userStorage UserStorage) Search(ctx context.Context, opt ...SearchOption) ([]SecuredUser, Metadata, error) {
+	// default search options
+	search := Search{
+		status: StatusSearchNone,
+		offset: 0,
+		limit:  20,
+	}
+
+	// apply options
+	for _, option := range opt {
+		option(&search)
+	}
+
+	var users []User
+	var err error
+	var metadata Metadata
+	// if none status, then search all user with pagination
+	if search.status == StatusSearchNone {
+		var totalCount int64
+		users, totalCount, err = userStorage.repository.GetPaginate(ctx, search.limit, search.offset)
+		metadata.Total = totalCount
+		metadata.Pending = totalCount - search.limit - search.offset
+		if metadata.Pending < 0 {
+			metadata.Pending = 0
+		}
+	} else {
+		// get free drivers
+		users, err = userStorage.repository.GetFreeDrivers(ctx)
+		metadata.Total = int64(len(users))
+		metadata.Pending = 0
+	}
+
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return nil, Metadata{}, ErrNotFoundUser
+		}
+		return nil, Metadata{}, ErrStorageGet
+	}
+
+	var secUsers []SecuredUser
+	for _, u := range users {
+		secUsers = append(secUsers, u.SecuredUser)
+	}
+
+	return secUsers, metadata, nil
+}
