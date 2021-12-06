@@ -135,6 +135,10 @@ func newRule(url, method, role string) rule {
 	}
 }
 
+type Ruler interface {
+	CanAccess(method, path, role string) bool
+}
+
 // Rules will store the rule configuration
 type Rules map[string]map[string][]string
 
@@ -186,7 +190,7 @@ func (r Rules) CanAccess(method, path, role string) bool {
 
 // AuthorizeRequest get the user who is authenticated from context, and check if it can
 // access to the resource (endpoint and action)
-func AuthorizeRequest(rules Rules) gin.HandlerFunc {
+func AuthorizeRequest(rules Ruler) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		claimsCtx, exist := ctx.Get("user_on_call")
 		if !exist {

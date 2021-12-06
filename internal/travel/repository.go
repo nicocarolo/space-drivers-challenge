@@ -6,13 +6,18 @@ import (
 	"errors"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
-	"reflect"
+	"github.com/nicocarolo/space-drivers/internal/platform/metrics"
+	"strconv"
+	"time"
 )
 
 const (
 	dbUser     = "root"
 	dbPassword = "root"
 	dbname     = "space_drivers"
+
+	timeMetricName   = "application.space.repository.time"
+	entityMetricName = "travel"
 )
 
 var (
@@ -66,7 +71,9 @@ func (sqlDb SqlRepository) SaveTravel(ctx context.Context, travel Travel) (Trave
 		userID = travel.UserID
 	}
 
+	trackTime := trackElapsed(ctx, entityMetricName, "insert")
 	result, err := q.Exec(travel.Status, travel.From.String(), travel.To.String(), userID)
+	trackTime(err == nil)
 	if err != nil {
 		return Travel{}, err
 	}
@@ -86,7 +93,9 @@ func (sqlDb SqlRepository) EditTravel(ctx context.Context, travel Travel) error 
 		return err
 	}
 
+	trackTime := trackElapsed(ctx, entityMetricName, "update")
 	result, err := q.Exec(travel.Status, travel.From.String(), travel.To.String(), travel.UserID, travel.ID)
+	trackTime(err == nil)
 	if err != nil {
 		return err
 	}
@@ -114,6 +123,7 @@ func (sqlDb SqlRepository) GetTravel(ctx context.Context, id int64) (Travel, err
 
 	defer query.Close()
 
+	trackTime := trackElapsed(ctx, entityMetricName, "select")
 	newRecord := query.QueryRowContext(ctx, id)
 
 	var travel Travel
@@ -121,6 +131,7 @@ func (sqlDb SqlRepository) GetTravel(ctx context.Context, id int64) (Travel, err
 	var to string
 	var userID sql.NullInt64
 	err = newRecord.Scan(&travel.ID, &travel.Status, &from, &to, &userID)
+	trackTime(err == nil)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Travel{}, ErrTravelNotFound
@@ -145,21 +156,13 @@ func (sqlDb SqlRepository) GetTravel(ctx context.Context, id int64) (Travel, err
 	return travel, nil
 }
 
-// NullInt64 is an alias for sql.NullInt64 data type
-type NullInt64 sql.NullInt64
-
-// Scan implements the Scanner interface for NullInt64
-func (ni *NullInt64) Scan(value interface{}) error {
-	var i sql.NullInt64
-	if err := i.Scan(value); err != nil {
-		return err
+func trackElapsed(ctx context.Context, entity, action string) func(success bool) {
+	start := time.Now()
+	return func(success bool) {
+		metrics.Timing(ctx, timeMetricName, time.Since(start),
+			[]string{
+				"result", strconv.FormatBool(success),
+				"action", action,
+				"entity", entity})
 	}
-
-	// if nil then make Valid false
-	if reflect.TypeOf(value) == nil {
-		*ni = NullInt64{i.Int64, false}
-	} else {
-		*ni = NullInt64{i.Int64, true}
-	}
-	return nil
 }
