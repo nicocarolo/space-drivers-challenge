@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,9 @@ func (n NoEncrypter) Compare(encrypted, pwd string) error {
 }
 
 func Test_LoginUser(t *testing.T) {
+	// config secret
+	_ = os.Setenv("JWT_SECRET", "jdnfksdmfksd")
+
 	userDB := newMockDB()
 	userDB.SaveUser(context.Background(), user.User{
 		SecuredUser: user.SecuredUser{

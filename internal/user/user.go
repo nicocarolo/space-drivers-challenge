@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nicocarolo/space-drivers/internal/platform/code_error"
 	"github.com/nicocarolo/space-drivers/internal/platform/jwt"
 	"github.com/nicocarolo/space-drivers/internal/platform/log"
 )
@@ -13,30 +14,13 @@ const (
 	RoleDriver = "driver"
 )
 
-type Error struct {
-	code   string
-	detail string
-}
-
-func (e Error) Error() string {
-	return fmt.Sprintf("%s - %s", e.code, e.detail)
-}
-
-func (e Error) Code() string {
-	return e.code
-}
-
-func (e Error) Detail() string {
-	return e.detail
-}
-
 var (
-	ErrInvalidPasswordToSave  = Error{code: "invalid_password", detail: "cannot assign received password to user"}
-	ErrInvalidPasswordToLogin = Error{code: "invalid_password", detail: "the password received to login is invalid"}
-	ErrStorageSave            = Error{code: "storage_failure", detail: "an error ocurred trying to save user"}
-	ErrStorageGet             = Error{code: "storage_failure", detail: "an error ocurred trying to get user"}
-	ErrNotFoundUser           = Error{code: "not_found_user", detail: "not founded the user to get"}
-	ErrInvalidRole            = Error{code: "invalid_role", detail: "the received role should be admin or driver"}
+	ErrInvalidPasswordToSave  = code_error.Error{Code: "invalid_password", Detail: "cannot assign received password to user"}
+	ErrInvalidPasswordToLogin = code_error.Error{Code: "invalid_password", Detail: "the password received to login is invalid"}
+	ErrStorageSave            = code_error.Error{Code: "storage_failure", Detail: "an error ocurred trying to save user"}
+	ErrStorageGet             = code_error.Error{Code: "storage_failure", Detail: "an error ocurred trying to get user"}
+	ErrNotFoundUser           = code_error.Error{Code: "not_found_user", Detail: "not founded the user to get"}
+	ErrInvalidRole            = code_error.Error{Code: "invalid_role", Detail: "the received role should be admin or driver"}
 )
 
 // WithPasswordEncrypter will change the algorithm to encrypt password with the received

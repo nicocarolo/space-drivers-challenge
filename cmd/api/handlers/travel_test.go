@@ -587,7 +587,7 @@ func Test_editTravel(t *testing.T) {
 			urlParam: createURLParam("1"),
 			userLogged: &jwt.Claims{
 				UserID: 1,
-				Role:   "driver",
+				Role:   "admin",
 			},
 			body: map[string]interface{}{
 				"status": "in_process",
@@ -647,7 +647,7 @@ func Test_editTravel(t *testing.T) {
 					"longitude": -2,
 				},
 			},
-			wantError:      errors.New("invalid_request_user - the user who is logged is not the owner of the travel and it is not an admin"),
+			wantError:      errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel and it is not an admin"),
 			statusExpected: http.StatusUnauthorized,
 		},
 
@@ -853,7 +853,7 @@ func Test_editTravel(t *testing.T) {
 					"longitude": -2,
 				},
 			},
-			wantError:      errors.New("invalid_request_user - cannot get user login"),
+			wantError:      errors.New("invalid_user_access - cannot identify user logged in"),
 			statusExpected: http.StatusUnauthorized,
 		},
 
@@ -877,7 +877,7 @@ func Test_editTravel(t *testing.T) {
 					"longitude": -2,
 				},
 			},
-			wantError:      errors.New("invalid_request_user - the user who is logged is not the owner of the travel and it is not an admin"),
+			wantError:      errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel and it is not an admin"),
 			statusExpected: http.StatusUnauthorized,
 		},
 	}

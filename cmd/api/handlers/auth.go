@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/nicocarolo/space-drivers/internal/platform/code_error"
 	"github.com/nicocarolo/space-drivers/internal/platform/jwt"
 	"github.com/nicocarolo/space-drivers/internal/platform/log"
 	"github.com/nicocarolo/space-drivers/internal/user"
@@ -52,18 +53,18 @@ func (h AuthHandler) Login(c *gin.Context) {
 }
 
 func mapAuthError(err error) (int, error) {
-	errToStatus := map[user.Error]int{
+	errToStatus := map[code_error.Error]int{
 		user.ErrNotFoundUser:           http.StatusNotFound,
 		user.ErrInvalidPasswordToLogin: http.StatusBadRequest,
 		user.ErrStorageGet:             http.StatusInternalServerError,
 	}
 
-	var userErr user.Error
+	var userErr code_error.Error
 	if errors.As(err, &userErr) {
 		if code, ok := errToStatus[userErr]; ok {
 			return code, apiError{
-				Code:        userErr.Code(),
-				Description: userErr.Detail(),
+				Code:        userErr.GetCode(),
+				Description: userErr.GetDetail(),
 			}
 		}
 	}

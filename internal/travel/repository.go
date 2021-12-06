@@ -7,14 +7,13 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/nicocarolo/space-drivers/internal/platform/metrics"
+	"os"
 	"strconv"
 	"time"
 )
 
 const (
-	dbUser     = "root"
-	dbPassword = "root"
-	dbname     = "space_drivers"
+	dbnameDefault = "space_drivers"
 
 	timeMetricName   = "application.space.repository.time"
 	entityMetricName = "travel"
@@ -34,22 +33,26 @@ type repository interface {
 }
 
 // SqlRepository sql client wrapper for user model
-// CREATE TABLE travel
-// (
-//		id int PRIMARY KEY NOT NULL AUTO_INCREMENT,
-//		user_id int,
-//		`from` varchar(50) NOT NULL,
-//		`to` varchar(50) NOT NULL,
-//		status varchar(15) NOT NULL
-// );
-// CREATE UNIQUE INDEX travel_id_uindex ON travel (id);
 type SqlRepository struct {
 	db *sql.DB
 }
 
 // NewRepository creates and return an SqlRepository
 func NewRepository() (SqlRepository, error) {
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", dbUser, dbPassword, dbname))
+	dbname := os.Getenv("DB_NAME")
+	dbuser := os.Getenv("DB_USER")
+	dbpass := os.Getenv("DB_PASSWORD")
+	dbimage := os.Getenv("DB_IMAGE_NAME")
+
+	if dbname == "" {
+		dbname = dbnameDefault
+	}
+	if dbuser == "" || dbpass == "" || dbimage == "" {
+		return SqlRepository{}, fmt.Errorf("cannot initialize user repository: the following settings " +
+			"(DB_USER, DB_PASSWORD, DB_IMAGE_NAME) are invalid")
+	}
+
+	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:3306)/%s", dbuser, dbpass, dbimage, dbname))
 	if err != nil {
 		return SqlRepository{}, err
 	}

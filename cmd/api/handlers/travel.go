@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/gin-gonic/gin"
-	"github.com/nicocarolo/space-drivers/internal/platform/jwt"
+	"github.com/nicocarolo/space-drivers/internal/platform/code_error"
 	"github.com/nicocarolo/space-drivers/internal/platform/log"
 	"github.com/nicocarolo/space-drivers/internal/travel"
 	"github.com/nicocarolo/space-drivers/internal/user"
@@ -85,45 +85,12 @@ func (h TravelHandler) Edit(c *gin.Context) {
 
 	travelToUpdate.ID = id
 
-	userCall, exist := c.Get("user_on_call")
-	if !exist {
-		log.Error(c, "there was an error getting logged in user from context on authorize request")
-		c.JSON(http.StatusUnauthorized, apiError{
-			Code:        "invalid_request_user",
-			Description: "cannot get user login",
-		})
-		return
-	}
-	userClaims := userCall.(jwt.Claims)
-
 	if travelToUpdate.UserID != 0 {
 		_, err := h.Users.Get(c, travelToUpdate.UserID)
 		if err != nil && errors.Is(err, user.ErrNotFoundUser) {
 			c.JSON(http.StatusBadRequest, apiError{
 				Code:        "invalid_travel_user",
 				Description: "the user received was not found",
-			})
-			return
-		}
-
-		existedTravel, err := h.Travels.Get(c, travelToUpdate.ID)
-		if err != nil {
-			code, resp := mapTravelError(err)
-			c.JSON(code, resp)
-			return
-		}
-
-		// if the user who is logged is not the owner of the travel, and it is not an admin then
-		// it cannot update travel
-		if existedTravel.UserID != userClaims.UserID && userClaims.Role != user.RoleAdmin {
-			log.Info(c, "there was an invalid check with user id on travel to update and user who is logged in",
-				log.Int64("travel_user_id", existedTravel.UserID),
-				log.Int64("logged_user_id", userClaims.UserID),
-				log.String("logged_role", userClaims.Role),
-			)
-			c.JSON(http.StatusUnauthorized, apiError{
-				Code:        "invalid_request_user",
-				Description: "the user who is logged is not the owner of the travel and it is not an admin",
 			})
 			return
 		}
@@ -140,7 +107,7 @@ func (h TravelHandler) Edit(c *gin.Context) {
 }
 
 func mapTravelError(err error) (int, error) {
-	errToStatus := map[travel.Error]int{
+	errToStatus := map[code_error.Error]int{
 		travel.ErrStorageSave:                 http.StatusInternalServerError,
 		travel.ErrStorageUpdate:               http.StatusInternalServerError,
 		travel.ErrStorageGet:                  http.StatusInternalServerError,
@@ -148,14 +115,16 @@ func mapTravelError(err error) (int, error) {
 		travel.ErrInvalidStatusToEditLocation: http.StatusBadRequest,
 		travel.ErrInvalidStatusToEdit:         http.StatusBadRequest,
 		travel.ErrInvalidUser:                 http.StatusBadRequest,
+		travel.ErrInvalidUserClaims:           http.StatusUnauthorized,
+		travel.ErrInvalidUserAccess:           http.StatusUnauthorized,
 	}
 
-	var travelErr travel.Error
+	var travelErr code_error.Error
 	if errors.As(err, &travelErr) {
 		if code, ok := errToStatus[travelErr]; ok {
 			return code, apiError{
-				Code:        travelErr.Code(),
-				Description: travelErr.Detail(),
+				Code:        travelErr.GetCode(),
+				Description: travelErr.GetDetail(),
 			}
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nicocarolo/space-drivers/internal/platform/jwt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -309,9 +310,10 @@ func Test_updateTravel(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		db       repository
-		trv      Travel
-		expected error
+		db         repository
+		userLogged *jwt.Claims
+		trv        Travel
+		expected   error
 	}{
 		"successful travel update: change locations in pending": {
 			db: newMockDBFromMap(map[int64]Travel{1: newTravel(1, -100, 70, 2, 20, StatusPending, 0)}),
@@ -327,9 +329,13 @@ func Test_updateTravel(t *testing.T) {
 				},
 				Status: StatusPending,
 			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
+			},
 		},
 
-		"successful travel update: change user id in pending": {
+		"successful travel update: change user id in pending by admin": {
 			db: newMockDBFromMap(map[int64]Travel{1: newTravel(1, -100, 70, 2, 20, StatusPending, 0)}),
 			trv: Travel{
 				ID: 1,
@@ -344,6 +350,50 @@ func Test_updateTravel(t *testing.T) {
 				Status: StatusPending,
 				UserID: 1234,
 			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
+			},
+		},
+
+		"failure travel update: not user logged in": {
+			db: newMockDBFromMap(map[int64]Travel{1: newTravel(1, -100, 70, 2, 20, StatusPending, 0)}),
+			trv: Travel{
+				ID: 1,
+				From: Point{
+					Lat: -100,
+					Lng: 70,
+				},
+				To: Point{
+					Lat: 2,
+					Lng: 20,
+				},
+				Status: StatusPending,
+				UserID: 1234,
+			},
+			expected: ErrInvalidUserClaims,
+		},
+
+		"failure travel update: invalid user logged in": {
+			db: newMockDBFromMap(map[int64]Travel{1: newTravel(1, -100, 70, 2, 20, StatusPending, 0)}),
+			trv: Travel{
+				ID: 1,
+				From: Point{
+					Lat: -100,
+					Lng: 70,
+				},
+				To: Point{
+					Lat: 2,
+					Lng: 20,
+				},
+				Status: StatusPending,
+				UserID: 1234,
+			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "driver",
+			},
+			expected: ErrInvalidUserAccess,
 		},
 
 		"failure travel update: change initial status without user on db travel": {
@@ -359,6 +409,10 @@ func Test_updateTravel(t *testing.T) {
 					Lng: 20,
 				},
 				Status: StatusInProcess,
+			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
 			},
 			expected: ErrInvalidUser,
 		},
@@ -376,6 +430,10 @@ func Test_updateTravel(t *testing.T) {
 					Lng: -33,
 				},
 				Status: StatusInProcess,
+			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
 			},
 			expected: ErrInvalidStatusToEditLocation,
 		},
@@ -396,6 +454,10 @@ func Test_updateTravel(t *testing.T) {
 				UserID: 123,
 			},
 			expected: ErrInvalidUser,
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
+			},
 		},
 
 		"failure travel update: no user id in no pending status": {
@@ -412,6 +474,10 @@ func Test_updateTravel(t *testing.T) {
 				},
 				Status: StatusInProcess,
 			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
+			},
 			expected: ErrInvalidUser,
 		},
 
@@ -427,6 +493,10 @@ func Test_updateTravel(t *testing.T) {
 					Lat: 2,
 					Lng: 20,
 				},
+			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
 			},
 			expected: ErrInvalidStatusToEdit,
 		},
@@ -446,6 +516,10 @@ func Test_updateTravel(t *testing.T) {
 				Status: StatusReady,
 				UserID: 1231,
 			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
+			},
 			expected: ErrInvalidStatusToEdit,
 		},
 
@@ -463,6 +537,10 @@ func Test_updateTravel(t *testing.T) {
 				},
 				Status: StatusPending,
 				UserID: 1231,
+			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
 			},
 			expected: ErrInvalidStatusToEdit,
 		},
@@ -501,6 +579,10 @@ func Test_updateTravel(t *testing.T) {
 				Status: StatusPending,
 				UserID: 1234,
 			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
+			},
 			expected: ErrStorageUpdate,
 		},
 	}
@@ -508,7 +590,11 @@ func Test_updateTravel(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			travelStorage := NewTravelStorage(tc.db)
-			result, err := travelStorage.Update(context.Background(), tc.trv)
+			ctx := context.Background()
+			if tc.userLogged != nil {
+				ctx = context.WithValue(ctx, "user_on_call", *tc.userLogged)
+			}
+			result, err := travelStorage.Update(ctx, tc.trv)
 
 			if tc.expected == nil {
 				assert.Nil(t, err)

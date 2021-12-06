@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"os"
 	"strings"
 	"testing"
 )
@@ -300,6 +301,9 @@ func Test_getUser(t *testing.T) {
 }
 
 func Test_loginUser(t *testing.T) {
+	// config secret
+	_ = os.Setenv("JWT_SECRET", "jdnfksdmfksd")
+
 	dbWithUser := newMockDB()
 	_, _ = dbWithUser.SaveUser(context.Background(), User{
 		SecuredUser: SecuredUser{
