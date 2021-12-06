@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nicocarolo/space-drivers/internal/platform/log"
 )
 
 type Status string
@@ -68,6 +69,7 @@ func NewTravelStorage(repository repository) TravelStorage {
 func (travelStorage TravelStorage) Get(ctx context.Context, id int64) (Travel, error) {
 	travel, err := travelStorage.repository.GetTravel(ctx, id)
 	if err != nil {
+		log.Error(ctx, "there was an error while getting travel", log.Err(err))
 		if errors.Is(err, ErrTravelNotFound) {
 			return Travel{}, ErrNotFoundTravel
 		}
@@ -82,6 +84,7 @@ func (travelStorage TravelStorage) Save(ctx context.Context, travel Travel) (Tra
 	travel.Status = StatusPending
 	travel, err := travelStorage.repository.SaveTravel(ctx, travel)
 	if err != nil {
+		log.Error(ctx, "there was an error while saving travel", log.Err(err))
 		return Travel{}, ErrStorageSave
 	}
 
@@ -92,33 +95,50 @@ func (travelStorage TravelStorage) Save(ctx context.Context, travel Travel) (Tra
 func (travelStorage TravelStorage) Update(ctx context.Context, newTravel Travel) (Travel, error) {
 	travel, err := travelStorage.Get(ctx, newTravel.ID)
 	if err != nil {
+		log.Error(ctx, "there was an error while getting travel on update", log.Err(err))
 		return Travel{}, err
 	}
 
 	// validate there is no change in location if status on travel is not pending
 	if (travel.From.Lat != newTravel.From.Lat || travel.From.Lng != newTravel.From.Lng ||
 		travel.To.Lat != newTravel.To.Lat || travel.To.Lng != newTravel.To.Lng) && travel.Status != StatusPending {
+		log.Info(ctx, "invalid check on update travel: modifying locations when travel is not pending",
+			log.Int64("travel_id", newTravel.ID),
+			log.String("travel_status", string(travel.Status)))
 		return Travel{}, ErrInvalidStatusToEditLocation
 	}
 
 	// validate status received is valid
 	if newTravel.Status != StatusPending && newTravel.Status != StatusInProcess && newTravel.Status != StatusReady {
+		log.Info(ctx, "invalid check on update travel: invalid status",
+			log.Int64("travel_id", newTravel.ID),
+			log.String("travel_status", string(newTravel.Status)))
 		return Travel{}, ErrInvalidStatusToEdit
 	}
 
 	// validate if status is not pending then the travel should have a user id
 	if newTravel.UserID == 0 && travel.Status != StatusPending {
+		log.Info(ctx, "invalid check on update travel: no user id on update when is not in pending status",
+			log.Int64("travel_id", newTravel.ID),
+			log.String("travel_status", string(newTravel.Status)))
 		return Travel{}, ErrInvalidUser
 	}
 
 	// validate if status received is not pending then the travel should have a user id
 	if newTravel.UserID == 0 && newTravel.Status != StatusPending {
+		log.Info(ctx, "invalid check on update travel: no user id on update when change has no pending status",
+			log.Int64("travel_id", newTravel.ID),
+			log.String("travel_status", string(newTravel.Status)))
 		return Travel{}, ErrInvalidUser
 	}
 
 	// validate if there is a change on the user id, when the travel already have a user, then the status received
 	// it should be pending
 	if newTravel.UserID != travel.UserID && travel.UserID != 0 && newTravel.Status != StatusPending {
+		log.Info(ctx, "invalid check on update travel: trying to change user when travel is not pending",
+			log.Int64("travel_id", newTravel.ID),
+			log.Int64("travel_user_id", newTravel.UserID),
+			log.String("travel_status", string(newTravel.Status)))
 		return Travel{}, ErrInvalidUser
 	}
 
@@ -129,6 +149,10 @@ func (travelStorage TravelStorage) Update(ctx context.Context, newTravel Travel)
 	// pending => in process
 	// in process => ready
 	if currentlyStatus != newStatus && currentlyStatus+1 != newStatus {
+		log.Info(ctx, "invalid check on update travel: invalid change of status",
+			log.Int64("travel_id", newTravel.ID),
+			log.String("travel_new_status", string(newTravel.Status)),
+			log.String("travel_status", string(travel.Status)))
 		return Travel{}, ErrInvalidStatusToEdit
 	}
 
@@ -139,6 +163,7 @@ func (travelStorage TravelStorage) Update(ctx context.Context, newTravel Travel)
 
 	err = travelStorage.repository.EditTravel(ctx, travel)
 	if err != nil {
+		log.Error(ctx, "there was an error while updating travel", log.Err(err))
 		return Travel{}, ErrStorageUpdate
 	}
 
