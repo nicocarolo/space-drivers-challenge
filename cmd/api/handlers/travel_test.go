@@ -437,6 +437,13 @@ func Test_editTravel(t *testing.T) {
 			Role:  "driver",
 		},
 	})
+	_, _ = userDB.SaveUser(context.Background(), user.User{
+		SecuredUser: user.SecuredUser{
+			ID:    5,
+			Email: "another2_email@hotmail.com",
+			Role:  "driver",
+		},
+	})
 	userDB = userDB.onGet(3, user.ErrUserNotFound)
 	storageWithUser := user.NewUserStorage(userDB)
 
@@ -579,6 +586,66 @@ func Test_editTravel(t *testing.T) {
 				UserID: 1,
 			},
 			statusExpected: http.StatusOK,
+		},
+
+		"successful edit travel by admin with one user to another user due to it is in pending status": {
+			travelStorage: travel.NewTravelStorage(newTravelMockDbFromMap(map[int64]travel.Travel{
+				1: newTravel(1, 1, 2, -1, -2, travel.StatusPending, 2)})),
+			urlParam: createURLParam("1"),
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
+			},
+			body: map[string]interface{}{
+				"user_id": 5,
+				"status":  "pending",
+				"from": map[string]float64{
+					"latitude":  1,
+					"longitude": 2,
+				},
+				"to": map[string]float64{
+					"latitude":  -1,
+					"longitude": -2,
+				},
+			},
+			want: travel.Travel{
+				ID:     1,
+				Status: "pending",
+				From: travel.Point{
+					Lat: 1,
+					Lng: 2,
+				},
+				To: travel.Point{
+					Lat: -1,
+					Lng: -2,
+				},
+				UserID: 5,
+			},
+			statusExpected: http.StatusOK,
+		},
+
+		"failure edit travel by driver with one user to another user, no matter if it is pending": {
+			travelStorage: travel.NewTravelStorage(newTravelMockDbFromMap(map[int64]travel.Travel{
+				1: newTravel(1, 1, 2, -1, -2, travel.StatusPending, 2)})),
+			urlParam: createURLParam("1"),
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "driver",
+			},
+			body: map[string]interface{}{
+				"user_id": 5,
+				"status":  "pending",
+				"from": map[string]float64{
+					"latitude":  1,
+					"longitude": 2,
+				},
+				"to": map[string]float64{
+					"latitude":  -1,
+					"longitude": -2,
+				},
+			},
+			wantError:      errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel and it is not an admin"),
+			statusExpected: http.StatusUnauthorized,
 		},
 
 		"failure travel update: change initial status without user on db travel": {
