@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/nicocarolo/space-drivers/internal/platform/code_error"
 	"github.com/nicocarolo/space-drivers/internal/user"
 	"net/http"
 	"strconv"
@@ -146,7 +147,7 @@ func (e apiError) Error() string {
 // mapUserError received an error (preferentially a one received from storage) and return a http status code and
 // an api error to use on the return value to the client
 func mapUserError(err error) (int, error) {
-	errToStatus := map[user.Error]int{
+	errToStatus := map[code_error.Error]int{
 		user.ErrInvalidPasswordToSave: http.StatusBadRequest,
 		user.ErrInvalidRole:           http.StatusBadRequest,
 		user.ErrStorageSave:           http.StatusInternalServerError,
@@ -154,12 +155,12 @@ func mapUserError(err error) (int, error) {
 		user.ErrStorageGet:            http.StatusInternalServerError,
 	}
 
-	var userErr user.Error
+	var userErr code_error.Error
 	if errors.As(err, &userErr) {
 		if code, ok := errToStatus[userErr]; ok {
 			return code, apiError{
-				Code:        userErr.Code(),
-				Description: userErr.Detail(),
+				Code:        userErr.GetCode(),
+				Description: userErr.GetDetail(),
 			}
 		}
 	}

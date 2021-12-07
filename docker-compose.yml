@@ -1,0 +1,35 @@
+version: '3'
+
+services:
+  db:
+    container_name: "test_db"
+    build:
+      context: .
+      dockerfile: db.Dockerfile
+    command: --default-authentication-plugin=mysql_native_password
+    networks:
+      - default
+    ports:
+      # <Port exposed> : < MySQL Port running inside container>
+      - "3306:3306"
+    # setting some env vars to create the DB
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "secret"
+      MYSQL_DATABASE: "space_drivers"
+      MYSQL_USER: "tester"
+      MYSQL_PASSWORD: "secret"
+      MYSQL_ROOT_PASSWORD: "root"
+  app:
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    container_name: app
+    env_file: settings.env
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    depends_on:
+      - db
+
+networks:
+  default:

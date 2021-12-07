@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
+	"os"
 	"strings"
 	"time"
 )
@@ -20,10 +21,16 @@ const (
 	iatKey    = "iat"
 	userIDKey = "user_id"
 	roleKey   = "role"
+
+	secretKey = "JWT_SECRET"
 )
 
 // GenerateToken will return a jwt generated token with an expiration date, to the user id and with the role received
 func GenerateToken(userid int64, role string) (string, error) {
+	secret := os.Getenv(secretKey)
+	if secret == "" {
+		return "", fmt.Errorf("cannot create token: the jwt secret is not configured")
+	}
 	claims := jwt.MapClaims{
 		expKey:    time.Now().Add(time.Minute * 20).Unix(),
 		iatKey:    time.Now().Unix(),
@@ -32,7 +39,7 @@ func GenerateToken(userid int64, role string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	t, err := token.SignedString([]byte("jdnfksdmfksd"))
+	t, err := token.SignedString([]byte(secret))
 	if err != nil {
 		return "", fmt.Errorf("%w : %s", ErrGenerateToken, err.Error())
 	}
@@ -42,13 +49,18 @@ func GenerateToken(userid int64, role string) (string, error) {
 
 //ValidateToken validate the received token
 func ValidateToken(token string) (*jwt.Token, error) {
+	secret := os.Getenv(secretKey)
+	if secret == "" {
+		return nil, fmt.Errorf("cannot validate token: the jwt secret is not configured")
+	}
+
 	//2nd arg function return secret key after checking if the signing method is HMAC and returned key is used by 'Parse' to decode the token)
 	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			//nil secret key
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte("jdnfksdmfksd"), nil
+		return []byte(secret), nil
 	})
 
 	if err != nil {
