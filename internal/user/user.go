@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/nicocarolo/space-drivers/internal/platform/jwt"
+	"github.com/nicocarolo/space-drivers/internal/platform/log"
 )
 
 const (
@@ -84,6 +85,7 @@ func NewUserStorage(repository repository, opts ...UserStorageOption) UserStorag
 func (userStorage UserStorage) Get(ctx context.Context, id int64) (SecuredUser, error) {
 	user, err := userStorage.repository.GetUser(ctx, id)
 	if err != nil {
+		log.Error(ctx, "there was an error getting user", log.Err(err))
 		if errors.Is(err, ErrUserNotFound) {
 			return SecuredUser{}, ErrNotFoundUser
 		}
@@ -97,23 +99,26 @@ func (userStorage UserStorage) Get(ctx context.Context, id int64) (SecuredUser, 
 	}, nil
 }
 
-// Save will store an User on repository and return it.
+// Save will store a User on repository and return it.
 // The password received is encrypted with passwordEncrypter on UserStorage, and the roles accepted are
 // 'admin' or 'driver's
 func (userStorage UserStorage) Save(ctx context.Context, user User) (SecuredUser, error) {
 	pwd, err := userStorage.passwordEncrypter.Encrypt(user.Password)
 	if err != nil {
+		log.Error(ctx, "there was an error encrypting password on save user", log.Err(err))
 		return SecuredUser{}, ErrInvalidPasswordToSave
 	}
 
 	user.Password = string(pwd)
 
 	if user.Role != RoleDriver && user.Role != RoleAdmin {
+		log.Error(ctx, fmt.Sprintf("there was an error due to invalid role (%s) on save user", user.Role))
 		return SecuredUser{}, ErrInvalidRole
 	}
 
 	user, err = userStorage.repository.SaveUser(ctx, user)
 	if err != nil {
+		log.Error(ctx, "there was an error saving user", log.Err(err))
 		return SecuredUser{}, ErrStorageSave
 	}
 
@@ -129,6 +134,7 @@ func (userStorage UserStorage) Save(ctx context.Context, user User) (SecuredUser
 func (userStorage UserStorage) Login(ctx context.Context, user User) (string, error) {
 	userGet, err := userStorage.repository.GetUserByEmail(ctx, user.Email)
 	if err != nil {
+		log.Error(ctx, "there was an error on logging user", log.Err(err))
 		if errors.Is(err, ErrUserNotFound) {
 			return "", ErrNotFoundUser
 		}
@@ -137,11 +143,13 @@ func (userStorage UserStorage) Login(ctx context.Context, user User) (string, er
 
 	err = userStorage.passwordEncrypter.Compare(userGet.Password, user.Password)
 	if err != nil {
+		log.Error(ctx, "there was an error with the received password on login user", log.Err(err))
 		return "", ErrInvalidPasswordToLogin
 	}
 
 	token, err := jwt.GenerateToken(userGet.ID, userGet.Role)
 	if err != nil {
+		log.Error(ctx, "there was an error while generating token on login user", log.Err(err))
 		return "", err
 	}
 
@@ -221,6 +229,7 @@ func (userStorage UserStorage) Search(ctx context.Context, opt ...SearchOption) 
 	}
 
 	if err != nil {
+		log.Error(ctx, "there was an error getting users on search", log.Err(err))
 		if errors.Is(err, ErrUserNotFound) {
 			return nil, Metadata{}, ErrNotFoundUser
 		}

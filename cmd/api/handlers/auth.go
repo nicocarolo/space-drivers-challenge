@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/nicocarolo/space-drivers/internal/platform/jwt"
+	"github.com/nicocarolo/space-drivers/internal/platform/log"
 	"github.com/nicocarolo/space-drivers/internal/user"
 	"net/http"
 )
@@ -90,6 +91,7 @@ func AuthenticateRequest() gin.HandlerFunc {
 
 		token, err := jwt.ValidateToken(tokenString)
 		if err != nil {
+			log.Error(ctx, "there was an error validating token on authenticate request", log.Err(err))
 			if errors.Is(err, jwt.ErrTokenExpired) {
 				ctx.AbortWithStatusJSON(http.StatusUnauthorized, apiError{
 					Code:        "expired_token",
@@ -106,6 +108,7 @@ func AuthenticateRequest() gin.HandlerFunc {
 
 		claims, err := jwt.GetClaims(token)
 		if err != nil {
+			log.Error(ctx, "there was an error getting claims from token on authenticate request", log.Err(err))
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, apiError{
 				Code:        "invalid_token_data",
 				Description: err.Error(),
@@ -187,6 +190,7 @@ func AuthorizeRequest(rules Rules) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		claimsCtx, exist := ctx.Get("user_on_call")
 		if !exist {
+			log.Error(ctx, "there was an error getting logged in user from context on authorize request")
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, apiError{
 				Code:        "authorize_failure",
 				Description: "cannot authorize user",
@@ -197,6 +201,10 @@ func AuthorizeRequest(rules Rules) gin.HandlerFunc {
 		claims := claimsCtx.(jwt.Claims)
 
 		if !rules.CanAccess(ctx.Request.Method, ctx.FullPath(), claims.Role) {
+			log.Info(ctx, "the user who was logged in cannot access resource",
+				log.Int64("user_id", claims.UserID),
+				log.String("resource", ctx.FullPath()),
+				log.String("role", claims.Role))
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, apiError{
 				Code: "authorize_failure",
 				Description: fmt.Sprintf("cannot authorize user with role: %s on %s to %s",

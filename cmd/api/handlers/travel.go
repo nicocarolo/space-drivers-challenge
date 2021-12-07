@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/nicocarolo/space-drivers/internal/platform/jwt"
+	"github.com/nicocarolo/space-drivers/internal/platform/log"
 	"github.com/nicocarolo/space-drivers/internal/travel"
 	"github.com/nicocarolo/space-drivers/internal/user"
 	"net/http"
@@ -66,6 +67,7 @@ func (h TravelHandler) Create(c *gin.Context) {
 func (h TravelHandler) Edit(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		log.Error(c, "there was an error getting id from request on edit travel", log.Err(err))
 		c.JSON(http.StatusBadRequest, apiError{
 			Code:        "invalid_request",
 			Description: "the request has not a travel id to update",
@@ -75,6 +77,7 @@ func (h TravelHandler) Edit(c *gin.Context) {
 
 	var travelToUpdate travel.Travel
 	if err := c.ShouldBindJSON(&travelToUpdate); err != nil {
+		log.Error(c, "there was an error parsing travel edit request", log.Err(err))
 		apiErr := mapValidateError(err)
 		c.JSON(http.StatusUnprocessableEntity, apiErr)
 		return
@@ -84,6 +87,7 @@ func (h TravelHandler) Edit(c *gin.Context) {
 
 	userCall, exist := c.Get("user_on_call")
 	if !exist {
+		log.Error(c, "there was an error getting logged in user from context on authorize request")
 		c.JSON(http.StatusUnauthorized, apiError{
 			Code:        "invalid_request_user",
 			Description: "cannot get user login",
@@ -112,6 +116,11 @@ func (h TravelHandler) Edit(c *gin.Context) {
 		// if the user who is logged is not the owner of the travel, and it is not an admin then
 		// it cannot update travel
 		if existedTravel.UserID != userClaims.UserID && userClaims.Role != user.RoleAdmin {
+			log.Info(c, "there was an invalid check with user id on travel to update and user who is logged in",
+				log.Int64("travel_user_id", existedTravel.UserID),
+				log.Int64("logged_user_id", userClaims.UserID),
+				log.String("logged_role", userClaims.Role),
+			)
 			c.JSON(http.StatusUnauthorized, apiError{
 				Code:        "invalid_request_user",
 				Description: "the user who is logged is not the owner of the travel and it is not an admin",
