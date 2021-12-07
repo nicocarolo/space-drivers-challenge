@@ -16,6 +16,16 @@ import (
 	"testing"
 )
 
+type FailureEncrypter struct{}
+
+func (f FailureEncrypter) Encrypt(pwd string) ([]byte, error) {
+	return nil, fmt.Errorf("mocked password crypto error")
+}
+
+func (f FailureEncrypter) Compare(encrypted, pwd string) error {
+	return fmt.Errorf("mocked password crypto error")
+}
+
 // mockDb a 'db' to use on UserHandler test with the capabilities to mock errors on create/get action
 type mockDb struct {
 	idCount int64
@@ -71,6 +81,15 @@ func (db mockDb) GetUser(ctx context.Context, id int64) (user.User, error) {
 	return u, nil
 }
 
+func (db mockDb) GetUserByEmail(ctx context.Context, email string) (user.User, error) {
+	for _, u := range db.users {
+		if u.Email == email {
+			return u, nil
+		}
+	}
+	return user.User{}, user.ErrUserNotFound
+}
+
 func Test_createUser(t *testing.T) {
 	testscases := map[string]struct {
 		userStorage    UsersStorage
@@ -104,9 +123,7 @@ func Test_createUser(t *testing.T) {
 		},
 
 		"failure due to invalid password": {
-			userStorage: user.NewUserStorage(newMockDB(), user.WithPasswordEncrypter(func(pwd string) ([]byte, error) {
-				return nil, fmt.Errorf("mocked password crypto error")
-			})),
+			userStorage: user.NewUserStorage(newMockDB(), user.WithPasswordEncrypter(FailureEncrypter{})),
 			body: map[string]interface{}{
 				"email":    "a user email",
 				"password": "an invalid pass",
