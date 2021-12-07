@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"testing"
 )
@@ -31,8 +32,9 @@ type mockDb struct {
 	idCount int64
 	users   map[int64]user.User
 
-	saveError map[string]error
-	getError  map[int64]error
+	saveError           map[string]error
+	getError            map[int64]error
+	getFreeDriversError error
 }
 
 func newMockDB() *mockDb {
@@ -52,6 +54,11 @@ func (db *mockDb) onCreate(email string, err error) *mockDb {
 
 func (db *mockDb) onGet(id int64, err error) *mockDb {
 	db.getError[id] = err
+	return db
+}
+
+func (db *mockDb) onGetFreeDrivers(err error) *mockDb {
+	db.getFreeDriversError = err
 	return db
 }
 
@@ -88,6 +95,60 @@ func (db mockDb) GetUserByEmail(ctx context.Context, email string) (user.User, e
 		}
 	}
 	return user.User{}, user.ErrUserNotFound
+}
+
+func (db mockDb) GetFreeDrivers(ctx context.Context) ([]user.User, error) {
+	if db.getFreeDriversError != nil {
+		return nil, db.getFreeDriversError
+	}
+	return []user.User{
+		user.User{
+			SecuredUser: user.SecuredUser{
+				ID:    1,
+				Email: "an_email@hotmail.com",
+				Role:  "driver",
+			},
+		},
+		user.User{
+			SecuredUser: user.SecuredUser{
+				ID:    2,
+				Email: "another_email@hotmail.com",
+				Role:  "driver",
+			},
+		},
+	}, nil
+}
+
+func (db mockDb) GetPaginate(ctx context.Context, limit, offset int64) ([]user.User, int64, error) {
+	users := []user.User{
+		user.User{
+			SecuredUser: user.SecuredUser{
+				ID:    1,
+				Email: "an_email@hotmail.com",
+				Role:  "driver",
+			},
+		},
+		user.User{
+			SecuredUser: user.SecuredUser{
+				ID:    2,
+				Email: "another_email@hotmail.com",
+				Role:  "driver",
+			},
+		},
+		user.User{
+			SecuredUser: user.SecuredUser{
+				ID:    3,
+				Email: "another_email3@hotmail.com",
+				Role:  "driver",
+			},
+		},
+	}
+
+	top := int64(len(users))
+	if limit < top {
+		top = limit
+	}
+	return users[offset:top], int64(len(users)), nil
 }
 
 func Test_createUser(t *testing.T) {
@@ -266,6 +327,212 @@ func Test_getUser(t *testing.T) {
 				assert.Equal(t, tc.want.Email, response.Email)
 				assert.Equal(t, tc.want.Role, response.Role)
 				assert.Equal(t, tc.want.ID, response.ID)
+			}
+		})
+	}
+}
+
+func Test_searchUser(t *testing.T) {
+	type response struct {
+		Total   int64              `json:"total"`
+		Pending int64              `json:"pending"`
+		Result  []user.SecuredUser `json:"result"`
+	}
+
+	testscases := map[string]struct {
+		userStorage    UsersStorage
+		urlParams      map[string]string
+		want           response
+		wantError      error
+		statusExpected int
+	}{
+		"successful get free drivers": {
+			userStorage: user.NewUserStorage(newMockDB()),
+			urlParams: map[string]string{
+				"status": "free",
+			},
+			want: response{
+				Total:   2,
+				Pending: 0,
+				Result: []user.SecuredUser{
+					user.SecuredUser{
+						ID:    1,
+						Email: "an_email@hotmail.com",
+						Role:  "driver",
+					},
+					user.SecuredUser{
+						ID:    2,
+						Email: "another_email@hotmail.com",
+						Role:  "driver",
+					},
+				},
+			},
+			statusExpected: http.StatusOK,
+		},
+
+		"failure get free drivers: bad status": {
+			userStorage: user.NewUserStorage(newMockDB()),
+			urlParams: map[string]string{
+				"status": "unknown",
+			},
+			wantError:      errors.New("invalid_request - invalid search status received"),
+			statusExpected: http.StatusBadRequest,
+		},
+
+		"failure get free drivers: with limit": {
+			userStorage: user.NewUserStorage(newMockDB()),
+			urlParams: map[string]string{
+				"status": "free",
+				"limit":  "0",
+			},
+			wantError:      errors.New("invalid_request - search free driver do not accept limit or offset param"),
+			statusExpected: http.StatusBadRequest,
+		},
+
+		"failure get free drivers: with offset": {
+			userStorage: user.NewUserStorage(newMockDB()),
+			urlParams: map[string]string{
+				"status": "free",
+				"offset": "0",
+			},
+			wantError:      errors.New("invalid_request - search free driver do not accept limit or offset param"),
+			statusExpected: http.StatusBadRequest,
+		},
+
+		"successful get drivers": {
+			userStorage: user.NewUserStorage(newMockDB()),
+			urlParams:   map[string]string{},
+			want: response{
+				Total:   3,
+				Pending: 0,
+				Result: []user.SecuredUser{
+					user.SecuredUser{
+						ID:    1,
+						Email: "an_email@hotmail.com",
+						Role:  "driver",
+					},
+					user.SecuredUser{
+						ID:    2,
+						Email: "another_email@hotmail.com",
+						Role:  "driver",
+					},
+					user.SecuredUser{
+						ID:    3,
+						Email: "another_email3@hotmail.com",
+						Role:  "driver",
+					},
+				},
+			},
+			statusExpected: http.StatusOK,
+		},
+
+		"failure get drivers: invalid limit 0": {
+			userStorage: user.NewUserStorage(newMockDB()),
+			urlParams: map[string]string{
+				"limit": "0",
+			},
+			wantError:      errors.New("invalid_request - invalid search limit received"),
+			statusExpected: http.StatusBadRequest,
+		},
+
+		"failure get drivers: invalid limit": {
+			userStorage: user.NewUserStorage(newMockDB()),
+			urlParams: map[string]string{
+				"limit": "a",
+			},
+			wantError:      errors.New("invalid_request - invalid search limit received"),
+			statusExpected: http.StatusBadRequest,
+		},
+
+		"failure get drivers: invalid offset": {
+			userStorage: user.NewUserStorage(newMockDB()),
+			urlParams: map[string]string{
+				"offset": "a",
+			},
+			wantError:      errors.New("invalid_request - invalid search offset received"),
+			statusExpected: http.StatusBadRequest,
+		},
+
+		"successful get drivers: 0 offset": {
+			userStorage: user.NewUserStorage(newMockDB()),
+			urlParams: map[string]string{
+				"offset": "0",
+			},
+			want: response{
+				Total:   3,
+				Pending: 0,
+				Result: []user.SecuredUser{
+					user.SecuredUser{
+						ID:    1,
+						Email: "an_email@hotmail.com",
+						Role:  "driver",
+					},
+					user.SecuredUser{
+						ID:    2,
+						Email: "another_email@hotmail.com",
+						Role:  "driver",
+					},
+					user.SecuredUser{
+						ID:    3,
+						Email: "another_email3@hotmail.com",
+						Role:  "driver",
+					},
+				},
+			},
+			statusExpected: http.StatusOK,
+		},
+	}
+
+	for name, tc := range testscases {
+		t.Run(name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+
+			c, _ := gin.CreateTestContext(w)
+
+			req := &http.Request{
+				URL:    &url.URL{},
+				Header: make(http.Header), // if you need to test headers
+			}
+			q := req.URL.Query()
+			for k, v := range tc.urlParams {
+				q.Add(k, v)
+			}
+			req.URL.RawQuery = q.Encode()
+			c.Request = req
+
+			handler := UserHandler{
+				Users: tc.userStorage,
+			}
+
+			handler.GetDrivers(c)
+
+			assert.Equal(t, tc.statusExpected, w.Code)
+
+			if tc.wantError != nil {
+				var apiErr apiError
+				err := json.Unmarshal(w.Body.Bytes(), &apiErr)
+				assert.Nil(t, err)
+
+				assert.Equal(t, tc.wantError.Error(), apiErr.Error())
+			} else {
+				var response struct {
+					Total   int64              `json:"total"`
+					Pending int64              `json:"pending"`
+					Result  []user.SecuredUser `json:"result"`
+				}
+
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.Nil(t, err)
+
+				assert.Len(t, response.Result, len(tc.want.Result))
+				assert.Equal(t, tc.want.Total, response.Total)
+				assert.Equal(t, tc.want.Pending, response.Pending)
+				for i, securedUser := range tc.want.Result {
+					assert.Equal(t, securedUser.ID, response.Result[i].ID)
+					assert.Equal(t, securedUser.Email, response.Result[i].Email)
+					assert.Equal(t, securedUser.Email, response.Result[i].Email)
+					assert.Equal(t, securedUser.Role, response.Result[i].Role)
+				}
 			}
 		})
 	}

@@ -16,6 +16,7 @@ type UsersStorage interface {
 	Get(ctx context.Context, id int64) (user.SecuredUser, error)
 	Save(ctx context.Context, user user.User) (user.SecuredUser, error)
 	Login(ctx context.Context, user user.User) (string, error)
+	Search(ctx context.Context, opt ...user.SearchOption) ([]user.SecuredUser, user.Metadata, error)
 }
 
 type UserHandler struct {
@@ -41,6 +42,77 @@ func (h UserHandler) Get(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, userResp)
+}
+
+// GetDrivers get driver by status, or pagination
+// ?status={status}&limit={pageNumber}&offset={pageSize}
+func (h UserHandler) GetDrivers(c *gin.Context) {
+	status := c.Query("status")
+	limit := c.Query("limit")
+	offset := c.Query("offset")
+
+	var searchOptions []user.SearchOption
+	// validate status
+	if status != "" /* && status != user.StatusSearchBusy */ && status != user.StatusSearchFree {
+		// currently only free drivers search available
+		c.JSON(http.StatusBadRequest, apiError{
+			Code:        "invalid_request",
+			Description: "invalid search status received",
+		})
+		return
+	}
+
+	// if status received
+	if status != "" {
+		// cannot receive limit and offset with status search
+		if limit != "" || offset != "" {
+			c.JSON(http.StatusBadRequest, apiError{
+				Code:        "invalid_request",
+				Description: "search free driver do not accept limit or offset param",
+			})
+			return
+		}
+		searchOptions = append(searchOptions, user.WithStatus(user.StatusSearch(status)))
+	}
+
+	// parse limit if it was received
+	if limit != "" {
+		limitNmbr, err := strconv.ParseInt(limit, 10, 64)
+		if err != nil || limitNmbr == 0 {
+			c.JSON(http.StatusBadRequest, apiError{
+				Code:        "invalid_request",
+				Description: "invalid search limit received",
+			})
+			return
+		}
+		searchOptions = append(searchOptions, user.WithLimit(limitNmbr))
+	}
+
+	// parse offset if it was received
+	if offset != "" {
+		offsetNmbr, err := strconv.ParseInt(offset, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, apiError{
+				Code:        "invalid_request",
+				Description: "invalid search offset received",
+			})
+			return
+		}
+		searchOptions = append(searchOptions, user.WithOffset(offsetNmbr))
+	}
+
+	userResp, meta, err := h.Users.Search(c, searchOptions...)
+	if err != nil {
+		code, resp := mapUserError(err)
+		c.JSON(code, resp)
+		return
+	}
+
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"total":   meta.Total,
+		"pending": meta.Pending,
+		"result":  userResp,
+	})
 }
 
 // Create handler will parse received body and save it to storage
