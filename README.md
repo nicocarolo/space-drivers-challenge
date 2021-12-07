@@ -2,6 +2,9 @@
 
 ## Enunciado
 
+La API es usada por una empresa de un servicio de mercadería que es repartida por conductores. Esta API permite ingresar
+como administrador, gestionar el ABM de los conductores y ver un listado de ellos.
+
 - Crear un proyecto de go usando módulos y tu librería HTTP de preferencia (en Space Guru usamos gin)
 - Crear una aplicación para gestionar los conductores que debe permitir:
     - Autenticar y autorizar usuarios admin
@@ -21,10 +24,15 @@
     - Separar la capa de presentación y datos (requerimiento mínimo)-
 - Al menos un endpoint debe tener pruebas unitarias, el resto son solo necesarias si querés demostrar tus capacidades
 
+Introduction
+
+This application is about users who want to administrate drivers and travels that has to be done. It is developed trying
+to follow [Package-Oriented-Design](https://www.ardanlabs.com/blog/2017/02/package-oriented-design.html) guideline
+
 ## Users
 
 The application allow two kind of users: 'admin' and 'driver', to interact with the application the user has to be
-logged in on [this resource](#login).
+logged in on [this resource](#authentication).
 
 A `admin` user has the capabilities to create more users (write) and get anyone (read) and is the only one able to
 create travels and modify it even if he is not the owner (travel must be in pending status). A `driver` user can modify
@@ -84,7 +92,8 @@ Get a user (only authorized for admin).
 
 ### `GET` /v1/user/drivers{?status=free}{?limit=20&offset=2}
 
-Search driver users (only authorized for admin). The pagination search is only available for all drivers (not by status).
+Search driver users (only authorized for admin). The pagination search is only available for all drivers (not by status)
+.
 
 - status: search for driver status, could be `free` or `busy` (currently `busy` search is not working).
 - limit: maximum quantity of users to obtain.
@@ -114,7 +123,7 @@ Search driver users (only authorized for admin). The pagination search is only a
 
 ## Travel
 
-Travel that has to be done for users (admin or drivers). 
+Travel that has to be done for users (admin or drivers).
 
 Attributes:
 
@@ -242,6 +251,37 @@ Validations:
 }
 ```
 
+## Authentication
+
+To access application resources users must log in through `/v1/login`, if the email and password received are valid
+application will return a token (JWT) with expiration date (20 minutes). Then, if the user want to access to any
+resource, it must send the received token as header on the request.
+
+```
+Authorization: Bearer {{token}}
+```
+
+### `POST` `/v1/login`
+
+#### Request
+
+```json
+{
+  "email": "an_email@hotmail.com",
+  "password": "a_password"
+}
+```
+
+#### Response
+
+`HTTP status code: 200`
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2Mzg4NDY1MzEsImlhdCI6MTYzODg0NTMzMSwicm9sZSI6ImFkbWluIiwidXNlcl9pZCI6MX0.e9X1dOHS_-DH7ShXQ7PbzzgbNH86I4yeXmM3EDRowvE"
+}
+```
+
 ## Errors
 
 - User
@@ -267,7 +307,7 @@ Validations:
     - 400: `invalid_status`: `invalid received status`
     - 400: `invalid_user`: `invalid user while performing update`
     - 401: `invalid_user_access`: `cannot identify user logged in`
-    - 401: `invalid_user_access`: `the user logged in cannot perform this action, he is not the owner of the travel a it is not an admin`
+    - 401: `invalid_user_access`: `the user logged in cannot perform this action, he is not the owner of the travel and it is not an admin`
 
 ## Deployment
 
@@ -280,21 +320,24 @@ docker-compose up --build
 The docker configuration will start two containers: sql and application. The mysql database will be configured
 using [migration.sql](database/migration.sql).
 
-To monitoring the app, we can observe metrics from cloud service that we use or the added from us (mock tracing with service like Datadog) where we can track:
+To monitoring the app, we can observe metrics from cloud service that we use or the added from us (mock tracing with
+service like Datadog) where we can track:
+
 - api health with traced endpoints with status code returned and time elapsed
-  - `application.space.api.time` 
-  - `application.space.api.count`
+    - `application.space.api.time`
+    - `application.space.api.count`
 - sql performance by entity (users and travels), operation, result and time
-  - `application.space.repository.time`
+    - `application.space.repository.time`
 
 The app also log the errors (currently on stdout but can be indexed and use services like Kibana for the availability).
-It could be nice to add services like NewRelic to take more measurements from an AppDex, custom transactions, services tracing (storage).
+It could be nice to add services like NewRelic to take more measurements from an AppDex, custom transactions, services
+tracing (storage).
 
 On `settings.env` it can set db parameters to connect the app and `jwt_secret` used for the authentication token.
 
 ## Improvements
 
-- Use uid for entity id and no mysql autoincrement. 
+- Use uid for entity id and no mysql autoincrement.
 - Test repository with go sql mock.
 - Work with `select for update` on write sql db.
 - Generalize a sql repository that can work with any model and move into /internal/platform.
