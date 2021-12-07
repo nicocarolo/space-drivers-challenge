@@ -43,6 +43,7 @@ func NewRepository() (SqlRepository, error) {
 	dbuser := os.Getenv("DB_USER")
 	dbpass := os.Getenv("DB_PASSWORD")
 	dbimage := os.Getenv("DB_IMAGE_NAME")
+	scope := os.Getenv("SCOPE")
 
 	if dbname == "" {
 		dbname = dbnameDefault
@@ -52,7 +53,11 @@ func NewRepository() (SqlRepository, error) {
 			"(DB_USER, DB_PASSWORD, DB_IMAGE_NAME) are invalid")
 	}
 
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:3306)/%s", dbuser, dbpass, dbimage, dbname))
+	dataSourceConnection := fmt.Sprintf("%s:%s@/%s", dbuser, dbpass, dbname)
+	if scope != "" {
+		dataSourceConnection = fmt.Sprintf("%s:%s@tcp(%s:3306)/%s", dbuser, dbpass, dbimage, dbname)
+	}
+	db, err := sql.Open("mysql", dataSourceConnection)
 	if err != nil {
 		return SqlRepository{}, err
 	}

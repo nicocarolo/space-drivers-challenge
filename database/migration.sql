@@ -1,4 +1,6 @@
-create table space_drivers.travels
+use space_drivers;
+
+create table travels
 (
     id      int auto_increment,
     user_id int         null,
@@ -9,10 +11,16 @@ create table space_drivers.travels
         unique (id)
 );
 
-alter table space_drivers.travels
+create index travels_status_index
+    on travels (status);
+
+create index travels_user_id_index
+    on travels (user_id);
+
+alter table travels
     add primary key (id);
 
-create table space_drivers.users
+create table users
 (
     id       int auto_increment,
     email    varchar(50)  not null,
@@ -24,8 +32,12 @@ create table space_drivers.users
         unique (id)
 );
 
-alter table space_drivers.users
+create index users_role_index
+    on users (role);
+
+alter table users
     add primary key (id);
 
+
 -- create a first admin with password hola1234 to be able to create more users
-INSERT INTO space_drivers.users (email, password, role) VALUES ('nico.carolo@hotmail.com', '$2a$10$0XNkz7egiyAPQbAEHvRtiOSIO/13.7ke0glVTZqkOC7gOl5BP6Ele', 'admin');
+INSERT INTO users (email, password, role) VALUES ('nico.carolo@hotmail.com', '$2a$10$0XNkz7egiyAPQbAEHvRtiOSIO/13.7ke0glVTZqkOC7gOl5BP6Ele', 'admin');

@@ -294,6 +294,7 @@ On `settings.env` it can set db parameters to connect the app and `jwt_secret` u
 
 ## Improvements
 
+- Use uid for entity id and no mysql autoincrement. 
 - Test repository with go sql mock.
 - Work with `select for update` on write sql db.
 - Generalize a sql repository that can work with any model and move into /internal/platform.
