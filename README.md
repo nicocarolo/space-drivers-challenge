@@ -84,12 +84,11 @@ Get a user (only authorized for admin).
 
 ### `GET` /v1/user/drivers{?status=free}{?limit=20&offset=2}
 
-Search driver users (only authorized for admin). The pagination search is only available for all drivers (not by status)
-.
+Search driver users (only authorized for admin). The pagination search is only available for all drivers (not by status).
 
-- status: search for driver status, could be `free` or `busy` (currently `busy` search is not working)
-- limit: maximum quantity of users to obtain
-- offset: step to move index on start driver to return
+- status: search for driver status, could be `free` or `busy` (currently `busy` search is not working).
+- limit: maximum quantity of users to obtain.
+- offset: step to move index on start driver to return.
 
 #### Response
 
@@ -115,7 +114,9 @@ Search driver users (only authorized for admin). The pagination search is only a
 
 ## Travel
 
-Travel that has to be done for users (admin or drivers). Attributes:
+Travel that has to be done for users (admin or drivers). 
+
+Attributes:
 
 - status: `pending`, `in_process`, `ready`
 - from: geolocation where the travel starts
@@ -192,17 +193,17 @@ Get travel by id
 
 ### `PUT` /v1/travel/{id}
 
-Update travel by id
+Update travel by id.
 
 Validations:
 
-- if the user who is logged is not the owner of the travel, and it is not an admin then it cannot update travel
-- it cannot change the location if the travel is not in `pending` status
-- status can only be `pending`, `in_process`, `ready`
-- if the travel is not in `pending` status then the request should have a user id (the same user id already have)
+- if the user who is logged is not the owner of the travel, and it is not an admin then it cannot update travel.
+- it cannot change the location if the travel is not in `pending` status.
+- status can only be `pending`, `in_process`, `ready`.
+- if the travel is not in `pending` status then the request should have a user id (the same user id already have).
 - if there is a change on the user id, when the travel already have a user, then the status received it should be
-  pending
-- status changes must be: `pending` → `in_process` → `ready`
+  pending.
+- status changes must be: `pending` → `in_process` → `ready`.
 
 #### Request
 
@@ -278,21 +279,25 @@ docker-compose up --build
 
 The docker configuration will start two containers: sql and application. The mysql database will be configured
 using [migration.sql](database/migration.sql).
+
 To monitoring the app, we can observe metrics from cloud service that we use or the added from us (mock tracing with service like Datadog) where we can track:
 - api health with traced endpoints with status code returned and time elapsed
   - `application.space.api.time` 
   - `application.space.api.count`
 - sql performance by entity (users and travels), operation, result and time
   - `application.space.repository.time`
-Also the app log the errors (currently on stdout but can be indexed and use services like Kibana for the availability).
+
+The app also log the errors (currently on stdout but can be indexed and use services like Kibana for the availability).
 It could be nice to add services like NewRelic to take more measurements from an AppDex, custom transactions, services tracing (storage).
+
+On `settings.env` it can set db parameters to connect the app and `jwt_secret` used for the authentication token.
 
 ## Improvements
 
-- Test repository with go sql mock
-- Work with `select for update` on write sql db
-- Generalize a sql repository that can work with any model and move into /internal/platform
-- Add logout endpoint and refresh login token
-- Add interface for jwt to work with dependency injection to make it able to test
-- Add metrics client
-- Improve search and add `busy` drivers search
+- Test repository with go sql mock.
+- Work with `select for update` on write sql db.
+- Generalize a sql repository that can work with any model and move into /internal/platform.
+- Add logout endpoint and refresh login token.
+- Add interface for jwt to work with dependency injection to make it able to test.
+- Add metrics client.
+- Improve search and add `busy` drivers search.
