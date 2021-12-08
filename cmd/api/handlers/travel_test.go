@@ -644,7 +644,7 @@ func Test_editTravel(t *testing.T) {
 					"longitude": -2,
 				},
 			},
-			wantError:      errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel and it is not an admin"),
+			wantError:      errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel or it is not an admin"),
 			statusExpected: http.StatusUnauthorized,
 		},
 
@@ -714,7 +714,7 @@ func Test_editTravel(t *testing.T) {
 					"longitude": -2,
 				},
 			},
-			wantError:      errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel and it is not an admin"),
+			wantError:      errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel or it is not an admin"),
 			statusExpected: http.StatusUnauthorized,
 		},
 
@@ -944,7 +944,7 @@ func Test_editTravel(t *testing.T) {
 					"longitude": -2,
 				},
 			},
-			wantError:      errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel and it is not an admin"),
+			wantError:      errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel or it is not an admin"),
 			statusExpected: http.StatusUnauthorized,
 		},
 	}

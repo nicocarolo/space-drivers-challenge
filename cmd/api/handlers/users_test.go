@@ -191,7 +191,7 @@ func Test_createUser(t *testing.T) {
 				"role":     "driver",
 			},
 			wantError:      errors.New("invalid_password - cannot assign received password to user"),
-			statusExpected: http.StatusBadRequest,
+			statusExpected: http.StatusInternalServerError,
 		},
 
 		"failure due to invalid role": {
