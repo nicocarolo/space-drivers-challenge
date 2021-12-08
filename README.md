@@ -40,7 +40,7 @@ created and modified by its owner and the admin user.
 Travels can be modified by `drivers` only when they own it or if it still lacks an owner (driver would assign
 itself to the travel).
 
-### `POST` /v1/user
+### `POST` /v1/users
 
 Create a user (only accessible by admins).
 
