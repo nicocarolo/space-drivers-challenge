@@ -24,23 +24,25 @@ como administrador, gestionar el ABM de los conductores y ver un listado de ello
     - Separar la capa de presentación y datos (requerimiento mínimo)-
 - Al menos un endpoint debe tener pruebas unitarias, el resto son solo necesarias si querés demostrar tus capacidades
 
-Introduction
+## Introduction
 
-This application is about users who want to administrate drivers and travels that has to be done. It is developed trying
-to follow [Package-Oriented-Design](https://www.ardanlabs.com/blog/2017/02/package-oriented-design.html) guideline
+The application implements a system to adminitrate users and its assigned travels developed following the
+[Package-Oriented-Design](https://www.ardanlabs.com/blog/2017/02/package-oriented-design.html) guideline.
 
 ## Users
 
-The application allow two kind of users: 'admin' and 'driver', to interact with the application the user has to be
-logged in on [this resource](#authentication).
+The application allows two kind of users: 'admin' and 'driver', to interact with the application users have to be
+authenticated against [this resource](#authentication).
 
-A `admin` user has the capabilities to create more users (write) and get anyone (read) and is the only one able to
-create travels and modify it even if he is not the owner (travel must be in pending status). A `driver` user can modify
-travel without user assigned or if he is the one assigned.
+Only the `admin` user has the capability to create (write) and get (read) users. On the other hand, travels can be
+created and modified by its owner and the admin user.
 
-### `POST` /v1/user/
+Travels can be modified by `drivers` only when they own it or if it still lacks an owner (driver would assign
+itself to the travel).
 
-Create a user (only authorized for admin).
+### `POST` /v1/user
+
+Create a user (only accessible by admins).
 
 #### Request
 
@@ -54,7 +56,7 @@ Create a user (only authorized for admin).
 
 - email: the user email.
 - password: the user password.
-- role: the user role, must be `driver` or `role`.
+- role: the user role, must be `driver` or `admin`.
 
 #### Response
 
@@ -68,15 +70,9 @@ Create a user (only authorized for admin).
 }
 ```
 
-### `GET` /v1/user/{id}
+### `GET` /v1/users/:id
 
-Get a user (only authorized for admin).
-
-#### Request
-
-```json
-{}
-```
+Get a user (only accessible by admins).
 
 #### Response
 
@@ -90,14 +86,13 @@ Get a user (only authorized for admin).
 }
 ```
 
-### `GET` /v1/user/drivers{?status=free}{?limit=20&offset=2}
+### `GET` /v1/users{?limit=n&offset=n}{?status=free}
 
-Search driver users (only authorized for admin). The pagination search is only available for all drivers (not by status)
-.
+Search driver users. The pagination search is only available for all drivers and not by status (as stated in exercise)
 
-- status: search for driver status, could be `free` or `busy` (currently `busy` search is not working).
+- status: search by driver status (`free` or `busy`, currently `busy` search is not working).
 - limit: maximum quantity of users to obtain.
-- offset: step to move index on start driver to return.
+- offset: the number of records to skip before selecting drivers
 
 #### Response
 
@@ -118,12 +113,12 @@ Search driver users (only authorized for admin). The pagination search is only a
 ```
 
 - pending: users pending to get.
-- result: the drivers.
-- total: the quantity of driver on storage.
+- result: search matching drivers
+- total: the total quantity of search drivers.
 
 ## Travel
 
-Travel that has to be done for users (admin or drivers).
+Travels that have to be done by users (admin or drivers).
 
 Attributes:
 
@@ -136,9 +131,11 @@ Attributes:
     - longitude
 - user_id: the user assigned to the travel
 
-### `POST` /v1/travel/
+### `POST` /v1/travels
 
 Create travel (only authorized for admin). The initial status for travel is `pending`.
+Travels are created and assigned to a user from a `admin`, and the user assigned can be changed
+(if the status still in pending).
 
 #### Request
 
@@ -176,7 +173,7 @@ Create travel (only authorized for admin). The initial status for travel is `pen
 }
 ```
 
-### `GET` /v1/travel/{id}
+### `GET` /v1/travels/:id
 
 Get travel by id
 
@@ -200,19 +197,19 @@ Get travel by id
 }
 ```
 
-### `PUT` /v1/travel/{id}
+### `PUT` /v1/travels/:id
 
 Update travel by id.
 
 Validations:
 
-- if the user who is logged is not the owner of the travel, and it is not an admin then it cannot update travel.
-- it cannot change the location if the travel is not in `pending` status.
+- if the authenticated user is not the owner of the travel nor an admin then it cannot update the travel.
+  - the travel is assigned to a driver from an admin.
+- the travel location can´t be modified if its not in `pending` state.
 - status can only be `pending`, `in_process`, `ready`.
 - if the travel is not in `pending` status then the request should have a user id (the same user id already have).
-- if there is a change on the user id, when the travel already have a user, then the status received it should be
-  pending.
-- status changes must be: `pending` → `in_process` → `ready`.
+- travels can have their user modified only when on pending state.
+- status valid flow: `pending` → `in_process` → `ready`.
 
 #### Request
 
@@ -253,9 +250,9 @@ Validations:
 
 ## Authentication
 
-To access application resources users must log in through `/v1/login`, if the email and password received are valid
-application will return a token (JWT) with expiration date (20 minutes). Then, if the user want to access to any
-resource, it must send the received token as header on the request.
+To access application resources users must be logged through `/v1/login`, if the email and password received are valid
+application will return a token (JWT) with expiration date (20 minutes). If the user wants to access a resource, it
+must send the received token in the request header Authorization.
 
 ```
 Authorization: Bearer {{token}}
@@ -318,30 +315,32 @@ docker-compose up --build
 ```
 
 The docker configuration will start two containers: sql and application. The mysql database will be configured
-using [migration.sql](database/migration.sql).
+using [migration.sql](database/migration.sql) (the initial status is with
+an admin user, check credentials there on comment).
 
-To monitoring the app, we can observe metrics from cloud service that we use or the added from us (mock tracing with
-service like Datadog) where we can track:
+To monitor the app, we can observe metrics from the cloud services we use or our custom ones (Datadog):
 
-- api health with traced endpoints with status code returned and time elapsed
-    - `application.space.api.time`
-    - `application.space.api.count`
+- api health with traced endpoints by returned status code and elapsed time
+  - `application.space.api.time`
+  - `application.space.api.count`
 - sql performance by entity (users and travels), operation, result and time
-    - `application.space.repository.time`
+  - `application.space.repository.time`
 
-The app also log the errors (currently on stdout but can be indexed and use services like Kibana for the availability).
-It could be nice to add services like NewRelic to take more measurements from an AppDex, custom transactions, services
-tracing (storage).
+App also logs errors (currently on stdout but can be indexed and used by services like Kibana).
 
-On `settings.env` it can set db parameters to connect the app and `jwt_secret` used for the authentication token.
+It would be useful to add services like NewRelic to take more measurements like AppDex, custom transactions, services
+tracing (storage), etc.
+
+### Environment Variables
+
+File `settings.env` holds db parameters and secrets used for the authentication token.
 
 ## Improvements
 
-- Use uid for entity id and no mysql autoincrement.
 - Test repository with go sql mock.
-- Work with `select for update` on write sql db.
+- Usage of `select for update` on writes.
 - Generalize a sql repository that can work with any model and move into /internal/platform.
 - Add logout endpoint and refresh login token.
-- Add interface for jwt to work with dependency injection to make it able to test.
-- Add metrics client.
-- Improve search and add `busy` drivers search.
+- Enhance JWT scheme dependency injection to improve unit tests.
+- Add Metrics Provider (DataDog, New Relic)
+- Enhance search by users role and drivers state (`busy` or `free`)

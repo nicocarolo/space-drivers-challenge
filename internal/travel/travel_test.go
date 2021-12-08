@@ -335,7 +335,7 @@ func Test_updateTravel(t *testing.T) {
 			},
 		},
 
-		"successful travel update: change user id in pending by admin": {
+		"successful travel update: change user id in pending status by admin": {
 			db: newMockDBFromMap(map[int64]Travel{1: newTravel(1, -100, 70, 2, 20, StatusPending, 0)}),
 			trv: Travel{
 				ID: 1,
@@ -353,6 +353,71 @@ func Test_updateTravel(t *testing.T) {
 			userLogged: &jwt.Claims{
 				UserID: 1,
 				Role:   "admin",
+			},
+		},
+
+		"successful travel update: change user id assigned on travel in pending status by admin": {
+			db: newMockDBFromMap(map[int64]Travel{1: newTravel(1, -100, 70, 2, 20, StatusPending, 2)}),
+			trv: Travel{
+				ID: 1,
+				From: Point{
+					Lat: -100,
+					Lng: 70,
+				},
+				To: Point{
+					Lat: 2,
+					Lng: 20,
+				},
+				Status: StatusPending,
+				UserID: 1234,
+			},
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "admin",
+			},
+		},
+
+		"failure travel update: cannot change user id in pending status from a travel without user by driver": {
+			db: newMockDBFromMap(map[int64]Travel{1: newTravel(1, -100, 70, 2, 20, StatusPending, 0)}),
+			trv: Travel{
+				ID: 1,
+				From: Point{
+					Lat: -100,
+					Lng: 70,
+				},
+				To: Point{
+					Lat: 2,
+					Lng: 20,
+				},
+				Status: StatusPending,
+				UserID: 1,
+			},
+			expected: errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel or it is not an admin"),
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "driver",
+			},
+		},
+
+		"failure travel update: cannot change user id in pending status even if the user logged in is the owner": {
+			db: newMockDBFromMap(map[int64]Travel{1: newTravel(1, -100, 70, 2, 20, StatusPending, 1)}),
+			trv: Travel{
+				ID: 1,
+				From: Point{
+					Lat: -100,
+					Lng: 70,
+				},
+				To: Point{
+					Lat: 2,
+					Lng: 20,
+				},
+				Status: StatusPending,
+				UserID: 2,
+			},
+			expected: errors.New("invalid_user_access - the user logged in cannot perform this action, he is not the owner of the travel or it is not an admin"),
+			userLogged: &jwt.Claims{
+				UserID: 1,
+				Role:   "driver",
 			},
 		},
 

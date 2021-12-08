@@ -121,74 +121,6 @@ func AuthenticateRequest() gin.HandlerFunc {
 	}
 }
 
-// rule model to perform role based access control
-type rule struct {
-	url    string
-	method string
-	role   string
-}
-
-func newRule(url, method, role string) rule {
-	return rule{
-		url:    url,
-		method: method,
-		role:   role,
-	}
-}
-
-type Ruler interface {
-	CanAccess(method, path, role string) bool
-}
-
-// Rules will store the rule configuration
-type Rules map[string]map[string][]string
-
-func NewRoleControl() Rules {
-	r := Rules{}
-
-	r.AddRule(newRule("/v1/user/", "POST", "admin"))
-	r.AddRule(newRule("/v1/user/:id", "GET", "admin"))
-	r.AddRule(newRule("/v1/user/drivers", "GET", "admin"))
-
-	r.AddRule(newRule("/v1/travel/", "POST", "admin"))
-	r.AddRule(newRule("/v1/travel/:id", "GET", "admin"))
-	r.AddRule(newRule("/v1/travel/:id", "GET", "driver"))
-	r.AddRule(newRule("/v1/travel/:id", "PUT", "driver"))
-	r.AddRule(newRule("/v1/travel/:id", "PUT", "admin"))
-
-	return r
-}
-
-func (r Rules) AddRule(rule rule) {
-	if _, ok := r[rule.method]; !ok {
-		r[rule.method] = map[string][]string{}
-	}
-	if _, ok := r[rule.method][rule.url]; !ok {
-		r[rule.method][rule.url] = []string{}
-	}
-
-	r[rule.method][rule.url] = append(r[rule.method][rule.url], rule.role)
-}
-
-func (r Rules) CanAccess(method, path, role string) bool {
-	if _, exist := r[method]; !exist {
-		return false
-	}
-
-	if _, exist := r[method][path]; !exist {
-		return false
-	}
-
-	rolesAccepted := r[method][path]
-	for _, roleAccepted := range rolesAccepted {
-		if roleAccepted == role {
-			return true
-		}
-	}
-
-	return false
-}
-
 // AuthorizeRequest get the user who is authenticated from context, and check if it can
 // access to the resource (endpoint and action)
 func AuthorizeRequest(rules Ruler) gin.HandlerFunc {
@@ -218,4 +150,77 @@ func AuthorizeRequest(rules Ruler) gin.HandlerFunc {
 			return
 		}
 	}
+}
+
+// rule model to perform role based access control
+type rule struct {
+	url    string
+	method string
+	role   string
+}
+
+func newRule(url, method, role string) rule {
+	return rule{
+		url:    url,
+		method: method,
+		role:   role,
+	}
+}
+
+type Ruler interface {
+	// CanAccess will return 'true' when a role is trying to access to a path (resource) with a http method,
+	// and it is authorized
+	CanAccess(method, path, role string) bool
+}
+
+// Rules will store the rule configuration
+type Rules map[string]map[string][]string
+
+func NewRoleControl() Rules {
+	r := Rules{}
+
+	r.AddRule(newRule("/v1/users/", "POST", "admin"))
+	r.AddRule(newRule("/v1/users/:id", "GET", "admin"))
+	r.AddRule(newRule("/v1/users/drivers", "GET", "admin"))
+
+	r.AddRule(newRule("/v1/travels/", "POST", "admin"))
+	r.AddRule(newRule("/v1/travels/:id", "GET", "admin"))
+	r.AddRule(newRule("/v1/travels/:id", "GET", "driver"))
+	r.AddRule(newRule("/v1/travels/:id", "PUT", "driver"))
+	r.AddRule(newRule("/v1/travels/:id", "PUT", "admin"))
+
+	return r
+}
+
+// AddRule create a rule on role control
+func (r Rules) AddRule(rule rule) {
+	if _, ok := r[rule.method]; !ok {
+		r[rule.method] = map[string][]string{}
+	}
+	if _, ok := r[rule.method][rule.url]; !ok {
+		r[rule.method][rule.url] = []string{}
+	}
+
+	r[rule.method][rule.url] = append(r[rule.method][rule.url], rule.role)
+}
+
+// CanAccess will return 'true' when a role is trying to access to a path (resource) with a http method,
+//	// and it is authorized
+func (r Rules) CanAccess(method, path, role string) bool {
+	if _, exist := r[method]; !exist {
+		return false
+	}
+
+	if _, exist := r[method][path]; !exist {
+		return false
+	}
+
+	rolesAccepted := r[method][path]
+	for _, roleAccepted := range rolesAccepted {
+		if roleAccepted == role {
+			return true
+		}
+	}
+
+	return false
 }

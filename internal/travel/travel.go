@@ -17,7 +17,7 @@ const (
 	StatusReady     = "ready"
 )
 
-var taskFlow = []Status{StatusPending, StatusInProcess, StatusReady}
+var travelFlow = []Status{StatusPending, StatusInProcess, StatusReady}
 
 var (
 	ErrStorageSave                 = code_error.Error{Code: "storage_failure", Detail: "an error ocurred trying to save travel"}
@@ -28,7 +28,7 @@ var (
 	ErrInvalidStatusToEdit         = code_error.Error{Code: "invalid_status", Detail: "invalid received status"}
 	ErrInvalidUser                 = code_error.Error{Code: "invalid_user", Detail: "invalid user while performing update"}
 	ErrInvalidUserClaims           = code_error.Error{Code: "invalid_user_access", Detail: "cannot identify user logged in"}
-	ErrInvalidUserAccess           = code_error.Error{Code: "invalid_user_access", Detail: "the user logged in cannot perform this action, he is not the owner of the travel and it is not an admin"}
+	ErrInvalidUserAccess           = code_error.Error{Code: "invalid_user_access", Detail: "the user logged in cannot perform this action, he is not the owner of the travel or it is not an admin"}
 )
 
 type Travel struct {
@@ -96,19 +96,7 @@ func (travelStorage TravelStorage) Update(ctx context.Context, newTravel Travel)
 		return Travel{}, ErrInvalidUserClaims
 	}
 
-	// if the user who is logged is not the owner of the travel, and it is not an admin then
-	// it cannot update travel
-	if travel.UserID != userLogged.UserID && userLogged.Role != user.RoleAdmin {
-		log.Info(ctx, "there was an invalid check with user id on travel to update and user who is logged in",
-			log.Int64("travel_id", travel.ID),
-			log.Int64("travel_user_id", travel.UserID),
-			log.Int64("logged_user_id", userLogged.UserID),
-			log.String("logged_role", userLogged.Role),
-		)
-		return Travel{}, ErrInvalidUserAccess
-	}
-
-	if err := validateTravelUpdate(ctx, travel, newTravel); err != nil {
+	if err := validateTravelUpdate(ctx, travel, newTravel, userLogged); err != nil {
 		return Travel{}, err
 	}
 
@@ -126,8 +114,8 @@ func (travelStorage TravelStorage) Update(ctx context.Context, newTravel Travel)
 	return travel, nil
 }
 
-func findInSlice(s []Status, e Status) int {
-	for i, a := range s {
+func findStatusInFlow(e Status) int {
+	for i, a := range travelFlow {
 		if a == e {
 			return i
 		}
@@ -136,18 +124,52 @@ func findInSlice(s []Status, e Status) int {
 }
 
 // validateTravelUpdate business validation on update travel
-func validateTravelUpdate(ctx context.Context, travel Travel, changes Travel) error {
+func validateTravelUpdate(ctx context.Context, travel Travel, changes Travel, userLogged jwt.Claims) error {
+	isPending := travel.Status == StatusPending
+	isChangeToPending := changes.Status == StatusPending
+
+	changedLocation := travel.From.Lat != changes.From.Lat || travel.From.Lng != changes.From.Lng ||
+		travel.To.Lat != changes.To.Lat || travel.To.Lng != changes.To.Lng
+
+	changedUserID := changes.UserID != travel.UserID
+
+	currentlyStatusIndex := findStatusInFlow(travel.Status)
+	newStatusIndex := findStatusInFlow(changes.Status)
+
+	changedStatus := newStatusIndex != currentlyStatusIndex
+
+	// if the authenticated user is not the owner of the travel nor an admin then it cannot update the travel
+	if travel.UserID != userLogged.UserID && userLogged.Role != user.RoleAdmin {
+		log.Info(ctx, "there was an invalid check with user id on travel to update and user who is logged in",
+			log.Int64("travel_id", travel.ID),
+			log.Int64("travel_user_id", travel.UserID),
+			log.Int64("logged_user_id", userLogged.UserID),
+			log.String("logged_role", userLogged.Role),
+		)
+		return ErrInvalidUserAccess
+	}
+
+	// the user id assigned to the travel is changed but the role from the user authenticated is not admin
+	if changedUserID && travel.UserID != 0 && userLogged.Role != user.RoleAdmin {
+		log.Info(ctx, "there was an invalid check with user id on travel to update and user who is logged in: cannot change user id on travel with driver role",
+			log.Int64("travel_id", travel.ID),
+			log.Int64("travel_user_id", travel.UserID),
+			log.Int64("logged_user_id", userLogged.UserID),
+			log.String("logged_role", userLogged.Role),
+		)
+		return ErrInvalidUserAccess
+	}
+
 	// validate there is no change in location if status on travel is not pending
-	if (travel.From.Lat != changes.From.Lat || travel.From.Lng != changes.From.Lng ||
-		travel.To.Lat != changes.To.Lat || travel.To.Lng != changes.To.Lng) && travel.Status != StatusPending {
+	if changedLocation && !isPending {
 		log.Info(ctx, "invalid check on update travel: modifying locations when travel is not pending",
 			log.Int64("travel_id", changes.ID),
 			log.String("travel_status", string(travel.Status)))
 		return ErrInvalidStatusToEditLocation
 	}
 
-	// validate status received is valid
-	if changes.Status != StatusPending && changes.Status != StatusInProcess && changes.Status != StatusReady {
+	// validate status received is valid (findStatusInFlow return -1 when is invalid status = not find on travel flow)
+	if newStatusIndex == -1 {
 		log.Info(ctx, "invalid check on update travel: invalid status",
 			log.Int64("travel_id", changes.ID),
 			log.String("travel_status", string(changes.Status)))
@@ -155,7 +177,7 @@ func validateTravelUpdate(ctx context.Context, travel Travel, changes Travel) er
 	}
 
 	// validate if travel currently status is not pending then the travel change should have a user id
-	if travel.Status != StatusPending && changes.UserID == 0 {
+	if !isPending && changes.UserID == 0 {
 		log.Info(ctx, "invalid check on update travel: no user id on update when is not in pending status",
 			log.Int64("travel_id", changes.ID),
 			log.String("travel_status", string(changes.Status)))
@@ -163,7 +185,7 @@ func validateTravelUpdate(ctx context.Context, travel Travel, changes Travel) er
 	}
 
 	// validate if status received is not pending then the travel should have a user id
-	if changes.Status != StatusPending && changes.UserID == 0 {
+	if !isChangeToPending && changes.UserID == 0 {
 		log.Info(ctx, "invalid check on update travel: no user id on update when change has no pending status",
 			log.Int64("travel_id", changes.ID),
 			log.String("travel_status", string(changes.Status)))
@@ -172,7 +194,7 @@ func validateTravelUpdate(ctx context.Context, travel Travel, changes Travel) er
 
 	// validate if there is a change on the user id, when the travel already have a user, then the status received
 	// it should be pending
-	if changes.UserID != travel.UserID && travel.UserID != 0 && changes.Status != StatusPending {
+	if changedUserID && travel.UserID != 0 && !isChangeToPending {
 		log.Info(ctx, "invalid check on update travel: trying to change user when travel is not pending",
 			log.Int64("travel_id", changes.ID),
 			log.Int64("travel_user_id", changes.UserID),
@@ -180,13 +202,9 @@ func validateTravelUpdate(ctx context.Context, travel Travel, changes Travel) er
 		return ErrInvalidUser
 	}
 
-	currentlyStatus := findInSlice(taskFlow, Status(travel.Status))
-	newStatus := findInSlice(taskFlow, Status(changes.Status))
-
 	// validate new status, this can be only the same status or the next logical move
-	// pending => in process
-	// in process => ready
-	if currentlyStatus != newStatus && currentlyStatus+1 != newStatus {
+	// pending => in process => ready
+	if changedStatus && currentlyStatusIndex+1 != newStatusIndex {
 		log.Info(ctx, "invalid check on update travel: invalid change of status",
 			log.Int64("travel_id", changes.ID),
 			log.String("travel_new_status", string(changes.Status)),

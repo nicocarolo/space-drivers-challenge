@@ -148,7 +148,7 @@ func (e apiError) Error() string {
 // an api error to use on the return value to the client
 func mapUserError(err error) (int, error) {
 	errToStatus := map[code_error.Error]int{
-		user.ErrInvalidPasswordToSave: http.StatusBadRequest,
+		user.ErrInvalidPasswordToSave: http.StatusInternalServerError,
 		user.ErrInvalidRole:           http.StatusBadRequest,
 		user.ErrStorageSave:           http.StatusInternalServerError,
 		user.ErrNotFoundUser:          http.StatusNotFound,
