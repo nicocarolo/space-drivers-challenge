@@ -74,14 +74,14 @@ func setApi(config Config) {
 	v1 := router.Group("/v1")
 
 	v1.GET("/users/:id", handlers.AuthenticateRequest(), handlers.AuthorizeRequest(config.ruler), config.userHandler.Get)
-	v1.POST("/users/", handlers.AuthenticateRequest(), handlers.AuthorizeRequest(config.ruler), config.userHandler.Create)
+	v1.POST("/users", handlers.AuthenticateRequest(), handlers.AuthorizeRequest(config.ruler), config.userHandler.Create)
 	v1.GET("/users/drivers", handlers.AuthenticateRequest(), handlers.AuthorizeRequest(config.ruler), config.userHandler.GetDrivers)
 
 	v1.GET("/travels/:id", handlers.AuthenticateRequest(), handlers.AuthorizeRequest(config.ruler), config.travelHandler.Get)
 	v1.PUT("/travels/:id", handlers.AuthenticateRequest(), handlers.AuthorizeRequest(config.ruler), config.travelHandler.Edit)
-	v1.POST("/travels/", handlers.AuthenticateRequest(), handlers.AuthorizeRequest(config.ruler), config.travelHandler.Create)
+	v1.POST("/travels", handlers.AuthenticateRequest(), handlers.AuthorizeRequest(config.ruler), config.travelHandler.Create)
 
-	v1.POST("/login/", config.authHandler.Login)
+	v1.POST("/login", config.authHandler.Login)
 
 	err := router.Run(":8080")
 	if err != nil {
